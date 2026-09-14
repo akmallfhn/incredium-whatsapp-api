@@ -417,11 +417,16 @@ class StatRepository:
                 v.lead_status::text AS lead_status,
                 v.project_value,
                 v.created_at::date AS started_date,
-                lm.last_message_at::date AS last_message_date
+                lm.last_message_at::date AS last_message_date,
+                fm.opened_by
             FROM wa_conversations v
             LEFT JOIN LATERAL (
                 SELECT MAX(created_at) AS last_message_at FROM wa_chats WHERE conv_id = v.id
             ) lm ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT direction::text AS opened_by FROM wa_chats
+                WHERE conv_id = v.id ORDER BY created_at, id LIMIT 1
+            ) fm ON TRUE
             WHERE {_CONVERSATION_WHERE}
             ORDER BY v.created_at DESC, v.id
             LIMIT :limit OFFSET :skip
@@ -456,8 +461,14 @@ class StatRepository:
             SELECT COUNT(*) AS total_conversation_count,
                    COUNT(DISTINCT v.brand_name) AS distinct_brand_count,
                    COUNT(v.brand_name) AS named_brand_count,
-                   COALESCE(SUM(v.project_value), 0)::bigint AS total_project_value
+                   COALESCE(SUM(v.project_value), 0)::bigint AS total_project_value,
+                   COUNT(*) FILTER (WHERE fm.opened_by = 'inbound') AS opened_by_inbound_count,
+                   COUNT(*) FILTER (WHERE fm.opened_by = 'outbound') AS opened_by_outbound_count
             FROM wa_conversations v
+            LEFT JOIN LATERAL (
+                SELECT direction::text AS opened_by FROM wa_chats
+                WHERE conv_id = v.id ORDER BY created_at, id LIMIT 1
+            ) fm ON TRUE
             WHERE {_CONVERSATION_WHERE}
         """)
         result = await self._session.execute(

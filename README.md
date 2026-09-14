@@ -112,8 +112,15 @@ menyebut nama, jadi dua-duanya perlu ada.
 
 Yang tidak tertangani tool mana pun jatuh ke `RunSqlQuery`: agent menulis `SELECT`-nya
 sendiri. Itu jalan terakhir, dan dipagari berlapis — satu pernyataan, hanya `wa_conversations`
-dan `wa_chats`, wajib menyaring `:tenant_id`, dan dijalankan di transaksi `READ ONLY` dengan
-`statement_timeout`, jadi tulisan yang lolos saringan teks tetap ditolak Postgres sendiri.
+dan `wa_chats`, dijalankan di transaksi `READ ONLY` dengan `statement_timeout`, jadi tulisan
+yang lolos saringan teks tetap ditolak Postgres sendiri.
+
+Scope tenant tidak dititipkan ke model. Kedua tabel itu disuntik sebagai CTE bernama sama yang
+sudah tersaring tenant dan sudah membuang kontak internal; nama CTE menang atas tabel dasar,
+jadi `FROM wa_conversations` mustahil melihat tenant lain. Nama tabel berskema (`public.x`)
+dan CTE yang menyamar sebagai nama tabel ditolak supaya jalan memutarnya tertutup. Menyuruh
+LLM mengingat filter tenant sempat dicoba dan gagal tidak deterministik — kadang ia lupa, lalu
+berhenti sambil meminta izin ke user.
 
 Empat metrik sengaja ditolak, bukan diestimasi: leakage (Rp), lost reason, cycle time
 inbound → closed, dan konversi antar stage sebagai deret waktu. Semuanya belum punya

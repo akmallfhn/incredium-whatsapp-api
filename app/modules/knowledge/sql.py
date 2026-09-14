@@ -5,11 +5,21 @@ import re
 # Hanya tabel percakapan WhatsApp. tenants sengaja tidak ikut: isinya tenant lain juga.
 ALLOWED_TABLES = frozenset({"wa_conversations", "wa_chats"})
 
-# Tabel yang barisnya milik satu tenant; query yang menyentuhnya wajib menyaring :tenant_id.
-TENANT_SCOPED_TABLES = frozenset({"wa_conversations", "wa_chats"})
-
 MAX_SQL_ROWS = 200
 STATEMENT_TIMEOUT_MS = 10_000
+
+# Nama CTE menang atas tabel dasar, jadi FROM wa_conversations mustahil lihat tenant lain.
+_SCOPE_CTE = """
+    wa_conversations AS (
+        SELECT * FROM public.wa_conversations
+        WHERE tenant_id = :tenant_id AND NOT is_internal
+    ),
+    wa_chats AS (
+        SELECT c.* FROM public.wa_chats c
+        JOIN public.wa_conversations v ON v.id = c.conv_id
+        WHERE v.tenant_id = :tenant_id AND NOT v.is_internal
+    )
+"""
 
 # Kata kunci yang tidak punya alasan muncul di SELECT dan jadi jalur eskalasi kalau muncul.
 _FORBIDDEN = re.compile(
@@ -34,7 +44,7 @@ class SqlRejected(Exception):
 
 
 def sanitize(sql: str) -> str:
-    """Kembalikan SQL yang sudah dibungkus batas baris, atau lempar SqlRejected berisi alasannya."""
+    """Bungkus SQL agent dengan scope tenant dan batas baris, atau lempar SqlRejected."""
     cleaned = (sql or "").strip().rstrip(";").strip()
     if not cleaned:
         raise SqlRejected("sql kosong")
@@ -54,20 +64,26 @@ def sanitize(sql: str) -> str:
             f"kata kunci '{forbidden.group(1)}' tidak diizinkan; tool ini hanya untuk membaca"
         )
 
-    cte = {m.lower() for m in _CTE_NAMES.findall(cleaned)}
-    sources = {s.split(".")[-1].lower() for s in _SOURCES.findall(cleaned)}
-    tables = sources - cte
-    unknown = tables - ALLOWED_TABLES
-    if unknown:
+    refs = _SOURCES.findall(cleaned)
+    qualified = sorted({r for r in refs if "." in r})
+    if qualified:
+        # public.wa_conversations melangkahi CTE scope dan membuka data tenant lain.
         raise SqlRejected(
-            f"tabel {sorted(unknown)} tidak boleh dibaca; yang tersedia: {sorted(ALLOWED_TABLES)}"
+            f"nama tabel berskema {qualified} tidak diizinkan; tulis nama tabelnya saja"
         )
 
-    if tables & TENANT_SCOPED_TABLES and ":tenant_id" not in cleaned:
+    cte = {m.lower() for m in _CTE_NAMES.findall(cleaned)}
+    clash = sorted(cte & ALLOWED_TABLES)
+    if clash:
+        raise SqlRejected(f"nama CTE {clash} bentrok dengan nama tabel; pakai nama lain")
+
+    unknown = sorted({r.lower() for r in refs} - cte - ALLOWED_TABLES)
+    if unknown:
         raise SqlRejected(
-            "query wajib menyaring tenant; tambahkan kondisi tenant_id = :tenant_id "
-            "(untuk wa_chats, lewat JOIN ke wa_conversations)"
+            f"tabel {unknown} tidak boleh dibaca; yang tersedia: {sorted(ALLOWED_TABLES)}"
         )
 
     # Subquery sekaligus jadi pagar: titik koma sisipan bikin sintaksnya gagal, bukan jalan.
-    return f"SELECT * FROM (\n{cleaned}\n) AS agent_query LIMIT :max_rows"
+    return (
+        f"WITH {_SCOPE_CTE.strip()}\nSELECT * FROM (\n{cleaned}\n) AS agent_query LIMIT :max_rows"
+    )

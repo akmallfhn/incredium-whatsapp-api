@@ -123,7 +123,11 @@ class ListConversations(BaseModel):
 
     Satu baris = satu percakapan, BUKAN satu brand. Brand yang sama bisa menghubungi dua kali,
     dan sebagian percakapan brand_name-nya masih kosong. Kalau yang ditanya jumlah brand, pakai
-    distinct_brand_count, jangan menghitung barisnya."""
+    distinct_brand_count, jangan menghitung barisnya.
+
+    opened_by menandai arah pesan PERTAMA: inbound berarti brand yang menghubungi duluan,
+    outbound berarti tim kita yang memulai. Untuk "berapa yang inbound, berapa yang outbound"
+    pakai opened_by_inbound_count dan opened_by_outbound_count, jangan menghitung pesan."""
 
     start_date: date | None = Field(default=None, description="Awal rentang, YYYY-MM-DD.")
     end_date: date | None = Field(default=None, description="Akhir rentang, inklusif, YYYY-MM-DD.")
@@ -151,23 +155,25 @@ class RunSqlQuery(BaseModel):
     gabungan beberapa syarat sekaligus, hitung distribusi, atau bandingkan dua kolom.
 
     Skema yang boleh dibaca:
-      wa_conversations(id, tenant_id, full_name, phone_number, brand_name, lead_status,
-        project_value, winning_rate, mode, note, is_internal, created_at, updated_at)
+      wa_conversations(id, full_name, phone_number, brand_name, lead_status, project_value,
+        winning_rate, mode, note, created_at, updated_at)
       wa_chats(id, conv_id, direction, sender_type, type, message, status, created_at,
         sent_at, delivered_at, read_at, failed_at)
       lead_status: cold | qualified | rate_card_sent | negotiation | closed
       direction: inbound | outbound — inbound itu pihak brand, outbound tim kita
-      project_value bigint dan sering NULL; is_internal = true adalah kontak tim sendiri
+      project_value bigint dan sering NULL
+
+    Dua tabel itu SUDAH otomatis disaring ke tenant yang sedang bertanya dan sudah membuang
+    kontak internal tim. Jangan menulis filter tenant_id atau is_internal sendiri, dan jangan
+    pernah bilang kamu butuh tenant_id atau izin — tulis saja query-nya seperti biasa.
 
     Aturan yang ditegakkan server; query yang melanggar ditolak beserta alasannya:
       - satu pernyataan saja, diawali SELECT atau WITH, tanpa titik koma di tengah
       - tanpa komentar SQL (-- atau /*)
-      - wajib menyaring tenant: tulis :tenant_id apa adanya sebagai parameter, misalnya
-        WHERE v.tenant_id = :tenant_id — jangan tulis nilai tenant-nya sendiri
-      - untuk wa_chats, saring tenant lewat JOIN ke wa_conversations
-      - hampir selalu tambahkan juga NOT is_internal supaya kontak tim tidak ikut terhitung"""
+      - tulis nama tabelnya saja tanpa skema; public.wa_conversations ditolak
+      - jangan menamai CTE-mu wa_conversations atau wa_chats"""
 
-    sql: str = Field(description="Satu pernyataan SELECT. Pakai :tenant_id sebagai parameter.")
+    sql: str = Field(description="Satu pernyataan SELECT, tanpa filter tenant.")
 
 
 class SearchConversations(BaseModel):
