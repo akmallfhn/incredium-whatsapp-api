@@ -107,6 +107,19 @@ _RESPONSE_AGGREGATES = """
 """
 
 
+# Semua filter opsional dibanding lewat CAST eksplisit: asyncpg tidak bisa menebak tipe NULL.
+_CONVERSATION_WHERE = """
+    v.tenant_id = :tenant_id AND NOT v.is_internal
+    AND (CAST(:start_at AS timestamptz) IS NULL OR v.created_at >= CAST(:start_at AS timestamptz))
+    AND (CAST(:end_at AS timestamptz) IS NULL OR v.created_at < CAST(:end_at AS timestamptz))
+    AND (CAST(:lead_status AS text) IS NULL
+         OR v.lead_status = CAST(:lead_status AS wa_lead_status_enum))
+    AND (NOT CAST(:only_with_brand AS boolean) OR v.brand_name IS NOT NULL)
+    AND (CAST(:min_project_value AS bigint) IS NULL
+         OR v.project_value >= CAST(:min_project_value AS bigint))
+"""
+
+
 def _rows(result) -> list[dict[str, Any]]:
     return [dict(row) for row in result.mappings().all()]
 
@@ -382,6 +395,83 @@ class StatRepository:
             stmt, {"tenant_id": tenant_id, "limit": limit, "skip": skip}
         )
         return _rows(result)
+
+    async def conversations(
+        self,
+        *,
+        tenant_id: str,
+        start_at: datetime | None,
+        end_at: datetime | None,
+        lead_status: str | None,
+        only_with_brand: bool,
+        min_project_value: int | None,
+        limit: int,
+        skip: int,
+    ) -> list[dict[str, Any]]:
+        """Baris identitas, bukan agregat; tanpa note supaya daftar panjang tetap ringkas."""
+        stmt = text(f"""
+            SELECT
+                v.id AS conv_id,
+                v.brand_name,
+                v.full_name,
+                v.lead_status::text AS lead_status,
+                v.project_value,
+                v.created_at::date AS started_date,
+                lm.last_message_at::date AS last_message_date
+            FROM wa_conversations v
+            LEFT JOIN LATERAL (
+                SELECT MAX(created_at) AS last_message_at FROM wa_chats WHERE conv_id = v.id
+            ) lm ON TRUE
+            WHERE {_CONVERSATION_WHERE}
+            ORDER BY v.created_at DESC, v.id
+            LIMIT :limit OFFSET :skip
+        """)
+        result = await self._session.execute(
+            stmt,
+            {
+                "tenant_id": tenant_id,
+                "start_at": start_at,
+                "end_at": end_at,
+                "lead_status": lead_status,
+                "only_with_brand": only_with_brand,
+                "min_project_value": min_project_value,
+                "limit": limit,
+                "skip": skip,
+            },
+        )
+        return _rows(result)
+
+    async def count_conversations(
+        self,
+        *,
+        tenant_id: str,
+        start_at: datetime | None,
+        end_at: datetime | None,
+        lead_status: str | None,
+        only_with_brand: bool,
+        min_project_value: int | None,
+    ) -> dict[str, Any]:
+        """Total baris dan brand unik; dipakai penjawab supaya tidak salah sebut keduanya."""
+        stmt = text(f"""
+            SELECT COUNT(*) AS total_conversation_count,
+                   COUNT(DISTINCT v.brand_name) AS distinct_brand_count,
+                   COUNT(v.brand_name) AS named_brand_count,
+                   COALESCE(SUM(v.project_value), 0)::bigint AS total_project_value
+            FROM wa_conversations v
+            WHERE {_CONVERSATION_WHERE}
+        """)
+        result = await self._session.execute(
+            stmt,
+            {
+                "tenant_id": tenant_id,
+                "start_at": start_at,
+                "end_at": end_at,
+                "lead_status": lead_status,
+                "only_with_brand": only_with_brand,
+                "min_project_value": min_project_value,
+            },
+        )
+        return dict(result.mappings().one())
 
     async def count_needs_action(self, *, tenant_id: str) -> int:
         stmt = text("""

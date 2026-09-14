@@ -15,6 +15,16 @@ class ResponseMode(StrEnum):
     ALL_FLAT = "all_flat"
 
 
+class LeadStatus(StrEnum):
+    """Stage funnel, urutannya sama dengan enum wa_lead_status_enum di Postgres."""
+
+    COLD = "cold"
+    QUALIFIED = "qualified"
+    RATE_CARD_SENT = "rate_card_sent"
+    NEGOTIATION = "negotiation"
+    CLOSED = "closed"
+
+
 class StatRequest(BaseModel):
     """Field dasar yang dipakai semua endpoint statistik."""
 
@@ -45,6 +55,16 @@ class SummaryRequest(TargetRequest):
 class ListRequest(StatRequest):
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1)
+
+
+class ConversationListRequest(StatRequest):
+    """Identitas percakapan, bukan agregat; tanggal kosong = seluruh korpus, bukan 30 hari."""
+
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1)
+    lead_status: LeadStatus | None = None
+    only_with_brand: bool = False
+    min_project_value: int | None = Field(default=None, ge=0)
 
 
 class BrandListRequest(BaseModel):

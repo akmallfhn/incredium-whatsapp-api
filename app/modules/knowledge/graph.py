@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 MAX_ROUNDS = 4
 
 # Hasil satu tool dipotong sebelum masuk prompt penjawab; transkrip panjang paling sering kena.
-MAX_RESULT_CHARS = 12_000
+# Muat untuk plafon ListConversations (100 baris, terukur ~21k char) plus sisa ruang.
+MAX_RESULT_CHARS = 28_000
 
 Emit = Callable[[str, str], Awaitable[None]]
 
@@ -48,9 +49,7 @@ def build_knowledge_graph(*, toolbox: ToolBox, system_prompt: str, emit: Emit):
             # Satu string siap tampil; bentuk terstrukturnya sudah ikut tersimpan ke kb_chats.
             await emit("source", f"{name} · {summary}" if summary else name)
 
-            messages.append(
-                ToolMessage(content=result[:MAX_RESULT_CHARS], tool_call_id=call.get("id", name))
-            )
+            messages.append(ToolMessage(content=_capped(result), tool_call_id=call.get("id", name)))
 
         return {"messages": messages, "sources": sources}
 
@@ -96,6 +95,17 @@ def build_knowledge_graph(*, toolbox: ToolBox, system_prompt: str, emit: Emit):
     graph.add_edge("answer", END)
 
     return graph.compile()
+
+
+def _capped(result: str) -> str:
+    """Potongan ditandai eksplisit: JSON terpotong diam-diam bikin penjawab menebak."""
+    if len(result) <= MAX_RESULT_CHARS:
+        return result
+    return result[:MAX_RESULT_CHARS] + (
+        "\n\n[HASIL DIPOTONG di batas karakter, baris terakhir tidak utuh. Jangan "
+        "menyimpulkan total dari baris yang terlihat — panggil ulang dengan saringan "
+        "lebih sempit.]"
+    )
 
 
 def _initial_messages(state: AgentState, system_prompt: str) -> list[Any]:

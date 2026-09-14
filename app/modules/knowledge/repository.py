@@ -15,6 +15,7 @@ from app.modules.knowledge.entity import (
     KbChat,
     KbConversation,
 )
+from app.modules.knowledge.sql import MAX_SQL_ROWS, STATEMENT_TIMEOUT_MS, sanitize
 
 # Potongan pesan yang dikembalikan retriever; cukup untuk menilai konteks tanpa membanjiri prompt.
 SNIPPET_CHARS = 240
@@ -538,6 +539,31 @@ class RetrievalRepository:
             "returned_count": len(rows),
             "truncated": total > len(rows),
             "list": list(reversed(rows)),
+        }
+
+    async def run_sql(self, *, tenant_id: str, sql: str) -> dict[str, Any]:
+        """Jalankan satu SELECT agent di transaksi READ ONLY; Postgres pagar terakhirnya."""
+        wrapped = sanitize(sql)
+
+        # Tutup transaksi implisit dulu supaya SET TRANSACTION jadi pernyataan pertama.
+        await self._session.rollback()
+        try:
+            await self._session.execute(text("SET TRANSACTION READ ONLY"))
+            await self._session.execute(
+                text(f"SET LOCAL statement_timeout = {STATEMENT_TIMEOUT_MS}")
+            )
+            result = await self._session.execute(
+                text(wrapped), {"tenant_id": tenant_id, "max_rows": MAX_SQL_ROWS}
+            )
+            rows = [dict(r) for r in result.mappings().all()]
+        finally:
+            await self._session.rollback()
+
+        return {
+            "row_count": len(rows),
+            "row_limit": MAX_SQL_ROWS,
+            "truncated": len(rows) >= MAX_SQL_ROWS,
+            "list": rows,
         }
 
     async def activity_window(self, *, tenant_id: str) -> tuple[datetime | None, datetime | None]:

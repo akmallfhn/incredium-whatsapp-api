@@ -31,6 +31,8 @@ Langkah 1 — kenali dulu pertanyaannya masuk jenis yang mana:
   B. ENTITAS — menyebut nama brand, nama orang, atau nomor tertentu.
   C. TOPIK — konsep tanpa nama: "siapa yang nawar", "ada yang komplain", "yang minta revisi".
   D. DAFTAR KERJA — "siapa belum dibalas", "deal apa yang jalan", "mana yang perlu dikejar".
+  E. MINTA NAMA — "sebutkan namanya", "brand apa saja", "siapa saja yang", \
+"deal di atas 50 juta yang mana". Cirinya: yang diminta identitas, bukan hitungan.
 
 Jenis B menang atas semua jenis lain. Begitu pertanyaannya menyebut satu nama tertentu, \
 ia jenis B — tidak peduli kalimatnya juga memakai kata "deal", "status", atau "berapa".

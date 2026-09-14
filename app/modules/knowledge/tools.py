@@ -8,8 +8,11 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.modules.knowledge.repository import SPEAKER, RetrievalRepository
+from app.modules.knowledge.sql import MAX_SQL_ROWS, SqlRejected
 from app.modules.stat.schema import (
     BrandListRequest,
+    ConversationListRequest,
+    LeadStatus,
     ListRequest,
     ResponseTimeRequest,
     StatRequest,
@@ -25,6 +28,9 @@ MAX_ROWS = 25
 
 # Cukup untuk menebak ejaan, tidak sampai menumpahkan seluruh direktori brand ke prompt.
 NEAREST_LIMIT = 12
+
+# Baris daftar identitas jauh lebih ringkas dari baris agregat, jadi plafonnya sendiri.
+MAX_IDENTITY_ROWS = 100
 
 # Penanda "batas data belum pernah diambil"; None sendiri berarti korpusnya memang kosong.
 _UNKNOWN = object()
@@ -104,6 +110,66 @@ class ListBrandDeals(BaseModel):
     page: int = Field(default=1, description="Halaman, mulai dari 1.")
 
 
+class ListConversations(BaseModel):
+    """Daftar percakapan beserta NAMA-nya: brand, kontak, stage funnel, dan nilai project.
+
+    Pakai ini setiap kali pertanyaannya minta nama atau daftar — "brand apa saja", "sebutkan
+    namanya", "siapa yang sudah dikirimi rate card". GetLeadStatus hanya memberi HITUNGAN per
+    stage dan tidak akan pernah bisa menyebut nama; kalau user minta nama, tool ini jawabannya.
+
+    Rentang tanggal menyaring KAPAN percakapannya dibuat, jadi ini juga yang menjawab "brand
+    baru minggu ini". Kosongkan dua-duanya kalau pertanyaannya tidak terikat waktu, misalnya
+    "brand mana saja yang sedang negotiation" — kosong berarti seluruh korpus, bukan 30 hari.
+
+    Satu baris = satu percakapan, BUKAN satu brand. Brand yang sama bisa menghubungi dua kali,
+    dan sebagian percakapan brand_name-nya masih kosong. Kalau yang ditanya jumlah brand, pakai
+    distinct_brand_count, jangan menghitung barisnya."""
+
+    start_date: date | None = Field(default=None, description="Awal rentang, YYYY-MM-DD.")
+    end_date: date | None = Field(default=None, description="Akhir rentang, inklusif, YYYY-MM-DD.")
+    lead_status: LeadStatus | None = Field(
+        default=None, description="Saring satu stage saja. Kosong berarti semua stage."
+    )
+    only_with_brand: bool = Field(
+        default=False, description="True untuk membuang percakapan yang brand_name-nya kosong."
+    )
+    min_project_value: int | None = Field(
+        default=None, description="Nilai project minimum dalam Rupiah penuh, misal 50000000."
+    )
+    limit: int = Field(default=50, description=f"Jumlah baris, maksimal {MAX_IDENTITY_ROWS}.")
+    page: int = Field(default=1, description="Halaman, mulai dari 1.")
+
+
+class RunSqlQuery(BaseModel):
+    """Jalankan satu SELECT read-only ke database, untuk pertanyaan yang tidak tertangani tool lain.
+
+    JALAN TERAKHIR, bukan jalan pertama. Tool lain sudah dipastikan sejalan dengan angka
+    dashboard; SQL tulisanmu sendiri tidak. Kalau ListConversations, GetSummary, GetLeadStatus,
+    atau SearchConversations bisa menjawab, pakai yang itu.
+
+    Berguna untuk potongan yang tidak ada tool-nya: kelompokkan menurut kolom tertentu, saring
+    gabungan beberapa syarat sekaligus, hitung distribusi, atau bandingkan dua kolom.
+
+    Skema yang boleh dibaca:
+      wa_conversations(id, tenant_id, full_name, phone_number, brand_name, lead_status,
+        project_value, winning_rate, mode, note, is_internal, created_at, updated_at)
+      wa_chats(id, conv_id, direction, sender_type, type, message, status, created_at,
+        sent_at, delivered_at, read_at, failed_at)
+      lead_status: cold | qualified | rate_card_sent | negotiation | closed
+      direction: inbound | outbound — inbound itu pihak brand, outbound tim kita
+      project_value bigint dan sering NULL; is_internal = true adalah kontak tim sendiri
+
+    Aturan yang ditegakkan server; query yang melanggar ditolak beserta alasannya:
+      - satu pernyataan saja, diawali SELECT atau WITH, tanpa titik koma di tengah
+      - tanpa komentar SQL (-- atau /*)
+      - wajib menyaring tenant: tulis :tenant_id apa adanya sebagai parameter, misalnya
+        WHERE v.tenant_id = :tenant_id — jangan tulis nilai tenant-nya sendiri
+      - untuk wa_chats, saring tenant lewat JOIN ke wa_conversations
+      - hampir selalu tambahkan juga NOT is_internal supaya kontak tim tidak ikut terhitung"""
+
+    sql: str = Field(description="Satu pernyataan SELECT. Pakai :tenant_id sebagai parameter.")
+
+
 class SearchConversations(BaseModel):
     """Cari percakapan lewat nama brand, nama kontak, nomor, catatan, atau isi pesan. Cocok
     eksak dan cocok mirip (typo, singkatan, imbuhan) dua-duanya kena.
@@ -148,8 +214,10 @@ class ToolBox:
             GetLeadStatus,
             ListUnanswered,
             ListBrandDeals,
+            ListConversations,
             SearchConversations,
             ReadConversation,
+            RunSqlQuery,
         ]
 
     async def run(self, name: str, args: dict[str, Any]) -> tuple[str, str]:
@@ -253,6 +321,36 @@ class ToolBox:
         total = data["metapaging"]["total_data"]
         return _dump(data), f"{total} brand deal berjalan"
 
+    async def _list_conversations(self, args: dict[str, Any]) -> tuple[str, str]:
+        size = _clamp(args.get("limit", 50), MAX_IDENTITY_ROWS)
+        data = await self._stats.conversations(
+            ConversationListRequest(
+                **self._range(args),
+                page=max(int(args.get("page", 1)), 1),
+                page_size=size,
+                lead_status=args.get("lead_status"),
+                only_with_brand=bool(args.get("only_with_brand", False)),
+                min_project_value=args.get("min_project_value"),
+            )
+        )
+        total = data["total_conversation_count"]
+        return _dump(data), f"{total} percakapan, {data['distinct_brand_count']} brand"
+
+    async def _run_sql_query(self, args: dict[str, Any]) -> tuple[str, str]:
+        sql = str(args.get("sql", ""))
+        try:
+            data = await self._retrieval.run_sql(tenant_id=self._tenant_id, sql=sql)
+        except SqlRejected as e:
+            # Penolakan adalah umpan balik, bukan jalan buntu: agent bisa menulis ulang query-nya.
+            return f"query ditolak: {e}. Perbaiki lalu panggil lagi.", f"sql ditolak: {e}"
+
+        if data["truncated"]:
+            data["reading_note"] = (
+                f"Hasilnya dipotong di {MAX_SQL_ROWS} baris. Jangan menyimpulkan total dari "
+                "baris yang terlihat; tulis ulang query-nya memakai COUNT atau agregat."
+            )
+        return _dump(data), f"sql — {data['row_count']} baris"
+
     async def _search_conversations(self, args: dict[str, Any]) -> tuple[str, str]:
         query = str(args.get("query", "")).strip()
         if not query:
@@ -302,9 +400,9 @@ def _line(chat: dict[str, Any]) -> str:
     return f"[{chat['created_at']:%Y-%m-%d %H:%M}] {speaker}: {body}"
 
 
-def _clamp(value: Any) -> int:
+def _clamp(value: Any, ceiling: int = MAX_ROWS) -> int:
     try:
-        return max(1, min(int(value), MAX_ROWS))
+        return max(1, min(int(value), ceiling))
     except (TypeError, ValueError):
         return 10
 

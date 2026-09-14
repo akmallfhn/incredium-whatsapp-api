@@ -4,6 +4,8 @@ Chatbot internal untuk menanyakan kondisi brand deal WhatsApp: CRUD thread perca
 
 Jawaban tidak pernah disusun dari ingatan model. Agent mengambil datanya lebih dulu lewat tool yang membungkus endpoint `stats/*` yang sama dengan dashboard, ditambah pencarian leksikal ke `wa_conversations`/`wa_chats`, lalu menulis jawaban hanya dari hasil pengambilan itu — jadi angka di chat dan angka di dashboard selalu bisa dicek silang. Jejak pengambilannya ikut disimpan di `kb_chats.sources`.
 
+Pertanyaan yang minta nama ("brand apa saja", "sebutkan namanya") dijawab `ListConversations`, yang mengembalikan identitas per percakapan dan bisa disaring rentang tanggal, `lead_status`, dan nilai minimum. Pertanyaan yang tidak tertangani tool mana pun jatuh ke `RunSqlQuery`, yang menjalankan satu `SELECT` tulisan agent di transaksi `READ ONLY`; query wajib menyaring `:tenant_id` dan hanya boleh membaca `wa_conversations` dan `wa_chats`.
+
 Semua endpoint memakai `POST` dengan body JSON, diautentikasi dengan Bearer token statis dari environment `CLIENT_SECRET`, dan di-scope per tenant lewat `tenant_id` — sama seperti modul `stat`. Percakapan milik tenant lain tidak pernah bisa dibuka: `conv_id` yang tidak cocok dengan `tenant_id` dibalas `404`, bukan `403`.
 
 Endpoint chat butuh `OPENAI_API_KEY`, atau `ANTHROPIC_API_KEY` saja kalau OpenAI tidak dipakai. Tanpa keduanya CRUD tetap jalan dan `/chat/stream` membalas `503`.

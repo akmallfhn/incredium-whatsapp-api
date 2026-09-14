@@ -105,6 +105,16 @@ ke Anthropic Haiku, baik di sini maupun di agent evaluasi lead. Yang dialihkan h
 kegagalan yang tidak akan berubah kalau diulang ke OpenAI lagi; error prompt atau schema
 tetap naik apa adanya. Isi `ANTHROPIC_API_KEY` untuk menyalakannya, kosongkan untuk mematikannya.
 
+Pertanyaan yang minta nama dijawab `ListConversations` — daftar percakapan beserta brand,
+kontak, stage, dan nilainya, bisa disaring rentang tanggal, stage, dan nilai minimum. Tool
+agregat seperti `GetLeadStatus` hanya menghitung per stage dan tidak akan pernah bisa
+menyebut nama, jadi dua-duanya perlu ada.
+
+Yang tidak tertangani tool mana pun jatuh ke `RunSqlQuery`: agent menulis `SELECT`-nya
+sendiri. Itu jalan terakhir, dan dipagari berlapis — satu pernyataan, hanya `wa_conversations`
+dan `wa_chats`, wajib menyaring `:tenant_id`, dan dijalankan di transaksi `READ ONLY` dengan
+`statement_timeout`, jadi tulisan yang lolos saringan teks tetap ditolak Postgres sendiri.
+
 Empat metrik sengaja ditolak, bukan diestimasi: leakage (Rp), lost reason, cycle time
 inbound → closed, dan konversi antar stage sebagai deret waktu. Semuanya belum punya
 sumber data di schema percakapan, dan menebaknya lebih berbahaya daripada bilang tidak

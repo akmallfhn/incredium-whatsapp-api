@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 PLANNER_MODEL = "gpt-4.1-mini"
 PLANNER_MAX_TOKENS = 500
 
-# Node jawaban dilihat orang, jadi model penuh; 1400 = 3x jawaban terpanjang yang terukur.
+# Node jawaban dilihat orang, jadi model penuh; 3000 = daftar 100 baris plus pengantar.
 ANSWER_MODEL = "gpt-4.1"
-ANSWER_MAX_TOKENS = 1400
+ANSWER_MAX_TOKENS = 3000
 
 TITLE_MODEL = "gpt-4.1-mini"
 TITLE_MAX_TOKENS = 32

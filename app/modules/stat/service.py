@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.modules.stat.repository import StatRepository
 from app.modules.stat.schema import (
     BrandListRequest,
+    ConversationListRequest,
     ListRequest,
     ResponseTimeRequest,
     StatRequest,
@@ -54,6 +55,28 @@ class StatService:
         start_at = datetime.combine(start_date, datetime.min.time(), tzinfo=tz)
         end_at = datetime.combine(end_date + timedelta(days=1), datetime.min.time(), tzinfo=tz)
         return req.tenant_id, start_at, end_at, tz_name
+
+    def _optional_bounds(
+        self, req: ConversationListRequest
+    ) -> tuple[datetime | None, datetime | None, str]:
+        """Seperti _scope tapi tanggal boleh kosong; kosong berarti tanpa batas, bukan default."""
+        tz_name = req.timezone or settings.stat_timezone
+        try:
+            tz = ZoneInfo(tz_name)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ApiError(400, "timezone must be a valid IANA timezone name") from None
+
+        if req.start_date is None and req.end_date is None:
+            return None, None, tz_name
+
+        end_date = req.end_date or datetime.now(tz).date()
+        start_date = req.start_date or end_date - timedelta(days=DEFAULT_RANGE_DAYS - 1)
+        if start_date > end_date:
+            raise ApiError(400, "start_date must be on or before end_date")
+
+        start_at = datetime.combine(start_date, datetime.min.time(), tzinfo=tz)
+        end_at = datetime.combine(end_date + timedelta(days=1), datetime.min.time(), tzinfo=tz)
+        return start_at, end_at, tz_name
 
     @staticmethod
     def _period(start_at: datetime, end_at: datetime, tz_name: str) -> dict[str, Any]:
@@ -173,6 +196,37 @@ class StatService:
             **self._period(start_at, end_at, tz_name),
             "list": [_isoformat_times(r) for r in rows],
             "metapaging": pagination.meta(total, page, page_size),
+        }
+
+    async def conversations(self, req: ConversationListRequest) -> dict[str, Any]:
+        """Daftar identitas percakapan. Tanpa tanggal = seluruh korpus, bukan 30 hari terakhir."""
+        await self._tenant(req.tenant_id)
+        page, page_size = pagination.normalize(req.page, req.page_size)
+        start_at, end_at, tz_name = self._optional_bounds(req)
+
+        filters = {
+            "tenant_id": req.tenant_id,
+            "start_at": start_at,
+            "end_at": end_at,
+            "lead_status": req.lead_status.value if req.lead_status else None,
+            "only_with_brand": req.only_with_brand,
+            "min_project_value": req.min_project_value,
+        }
+        totals = await self._stats.count_conversations(**filters)
+        rows = await self._stats.conversations(
+            **filters, limit=page_size, skip=pagination.offset(page, page_size)
+        )
+
+        period = (
+            self._period(start_at, end_at, tz_name)
+            if start_at and end_at
+            else {"start_date": None, "end_date": None, "timezone": tz_name}
+        )
+        return {
+            **period,
+            **totals,
+            "list": [_isoformat_times(r) for r in rows],
+            "metapaging": pagination.meta(totals["total_conversation_count"], page, page_size),
         }
 
     async def needs_action(self, req: BrandListRequest) -> dict[str, Any]:
