@@ -10,11 +10,11 @@ Postgres via Supabase. Deployed on Railway.
 
 ## Stack
 
-Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-settings, httpx. LangGraph + LangChain (`langchain-openai`) for agents. `uv` for dependencies, `ruff` for lint and format.
+Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-settings, httpx. LangGraph + LangChain (`langchain-openai`, with `langchain-anthropic` as fallback) for agents. `uv` for dependencies, `ruff` for lint and format.
 
 ## Running locally
 
-1. Copy `.env.example` to `.env` and fill in `DATABASE_URL`, the `META_*` and `SUPABASE_*` values, `CLIENT_SECRET`, and `OPENAI_API_KEY`.
+1. Copy `.env.example` to `.env` and fill in `DATABASE_URL`, the `META_*` and `SUPABASE_*` values, `CLIENT_SECRET`, `OPENAI_API_KEY`, and `ANTHROPIC_API_KEY` (the fallback used when the OpenAI quota runs out).
 2. `uv run dev` — reload server on `:$PORT` (or `$APP_PORT` locally). `uv run start` for the non-reload variant; Railway uses the `Procfile`.
 3. No automated test suite exists yet. Verify changes with `uv run ruff check .`, `uv run ruff format --check .`, booting the app (`create_app()` must construct), and manual requests against a running server.
 

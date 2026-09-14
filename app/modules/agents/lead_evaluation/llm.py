@@ -20,8 +20,11 @@ MAX_OUTPUT_TOKENS = 400
 
 @lru_cache(maxsize=1)
 def structured_llm() -> Runnable:
-    llm = build_llm(model=MODEL, max_tokens=MAX_OUTPUT_TOKENS)
-    return llm.with_structured_output(LeadEvaluation, method="json_schema")
+    return build_llm(
+        model=MODEL,
+        max_tokens=MAX_OUTPUT_TOKENS,
+        structured_output=LeadEvaluation,
+    )
 
 
 def render_prompt(ctx: ConversationContext) -> str:

@@ -6,7 +6,7 @@ Jawaban tidak pernah disusun dari ingatan model. Agent mengambil datanya lebih d
 
 Semua endpoint memakai `POST` dengan body JSON, diautentikasi dengan Bearer token statis dari environment `CLIENT_SECRET`, dan di-scope per tenant lewat `tenant_id` — sama seperti modul `stat`. Percakapan milik tenant lain tidak pernah bisa dibuka: `conv_id` yang tidak cocok dengan `tenant_id` dibalas `404`, bukan `403`.
 
-Endpoint chat butuh `OPENAI_API_KEY`. Tanpa itu CRUD tetap jalan dan `/chat/stream` membalas `503`.
+Endpoint chat butuh `OPENAI_API_KEY`, atau `ANTHROPIC_API_KEY` saja kalau OpenAI tidak dipakai. Tanpa keduanya CRUD tetap jalan dan `/chat/stream` membalas `503`.
 
 ## Endpoints
 
@@ -340,4 +340,4 @@ data: "Bq8ZwLmXe4TnPsRvHkJdY"
 | `401` | `missing or invalid authorization header` |
 | `404` | `conversation not found` |
 | `429` | `too many questions in flight, try again shortly` |
-| `503` | `knowledge chat is not configured: OPENAI_API_KEY is missing` |
+| `503` | `knowledge chat is not configured: OPENAI_API_KEY or ANTHROPIC_API_KEY is missing` |

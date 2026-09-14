@@ -39,8 +39,9 @@ Semua node menangkap exception sendiri dan menaruh pesannya di `state["error"]`,
 | Node | Provider | Model | Batas output |
 |---|---|---|---|
 | `evaluate` | openai | `gpt-4.1-mini` | 400 token |
+| `evaluate` (fallback) | anthropic | `claude-haiku-4-5-20251001` | 400 token |
 
-Structured output memakai `method="json_schema"`, yaitu Structured Outputs milik OpenAI, jadi balasannya dijamin cocok dengan skema `LeadEvaluation`.
+Structured output di OpenAI memakai `method="json_schema"`, yaitu Structured Outputs miliknya, jadi balasannya dijamin cocok dengan skema `LeadEvaluation`. Jalur Anthropic memakai default-nya, tool call — hasil akhirnya sama-sama divalidasi ke `LeadEvaluation`.
 
 Batas 400 token bukan tebakan: balasan terpanjang yang realistis — `note` empat kalimat, brand dan nominal terisi — terukur 129 token dengan encoding `o200k_base`. Plafonnya diambil 3x angka itu supaya `note` panjang tidak pernah terpotong di tengah.
 
@@ -74,11 +75,13 @@ Alasannya konkurensi. Dua batch webhook untuk percakapan yang sama bisa datang h
 
 ## Konfigurasi
 
-Hanya satu environment variable:
-
 | Env | Fungsi |
 |---|---|
-| `OPENAI_API_KEY` | Kosong berarti semua agent mati; webhook tetap menyimpan pesan seperti biasa. |
+| `OPENAI_API_KEY` | Jalur utama. |
+| `ANTHROPIC_API_KEY` | Cadangan waktu kuota OpenAI habis. Kosong berarti tanpa fallback. |
+| `ANTHROPIC_FALLBACK_MODEL` | Opsional; menimpa `FALLBACK_MODEL` kalau mau ganti model Haiku. |
+
+Kosong dua-duanya berarti semua agent mati; webhook tetap menyimpan pesan seperti biasa.
 
 Sisanya konstanta di kode, bukan env — nilainya menempel pada perilaku agent, bukan pada environment:
 
@@ -89,6 +92,7 @@ Sisanya konstanta di kode, bukan env — nilainya menempel pada perilaku agent, 
 | `MAX_CHATS` | `200` | [lead_evaluation/repository.py](../../app/modules/agents/lead_evaluation/repository.py) |
 | `MAX_MESSAGE_CHARS` | `500` | [lead_evaluation/repository.py](../../app/modules/agents/lead_evaluation/repository.py) |
 | `DEFAULT_TIMEOUT` | `120.0` detik | [agents/llm.py](../../app/modules/agents/llm.py) |
+| `FALLBACK_MODEL` | `claude-haiku-4-5-20251001` | [agents/llm.py](../../app/modules/agents/llm.py) |
 
 Pesan tanpa teks (sticker, gambar, dokumen) dirender sebagai `[kiriman <tipe>]`.
 

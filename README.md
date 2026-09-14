@@ -100,6 +100,11 @@ penjawab (`gpt-4.1`) tidak terikat tool sama sekali dan hanya membaca hasil retr
 supaya token jawaban tidak pernah terpakai memanggil tool dan jawabannya bisa di-stream
 utuh dari token pertama.
 
+Kalau kuota OpenAI habis — atau OpenAI-nya sedang down — panggilannya otomatis dialihkan
+ke Anthropic Haiku, baik di sini maupun di agent evaluasi lead. Yang dialihkan hanya
+kegagalan yang tidak akan berubah kalau diulang ke OpenAI lagi; error prompt atau schema
+tetap naik apa adanya. Isi `ANTHROPIC_API_KEY` untuk menyalakannya, kosongkan untuk mematikannya.
+
 Empat metrik sengaja ditolak, bukan diestimasi: leakage (Rp), lost reason, cycle time
 inbound → closed, dan konversi antar stage sebagai deret waktu. Semuanya belum punya
 sumber data di schema percakapan, dan menebaknya lebih berbahaya daripada bilang tidak
@@ -129,6 +134,7 @@ cp .env.example .env
 # wajib: DATABASE_URL, META_APP_SECRET, META_WEBHOOK_VERIFY_TOKEN
 # untuk attachment: SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
 # untuk stats + knowledge: CLIENT_SECRET; untuk knowledge: OPENAI_API_KEY
+# opsional: ANTHROPIC_API_KEY, dipakai otomatis kalau kuota OpenAI habis
 
 # 3. Jalankan server
 uv run dev          # http://localhost:$APP_PORT  (reload)

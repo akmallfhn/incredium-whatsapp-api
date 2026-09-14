@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     # Agent automation (LangGraph). Model & batasnya konstanta di app/modules/agents.
     openai_api_key: str = ""
 
+    # Cadangan waktu kuota OpenAI habis; kosong = tanpa fallback.
+    anthropic_api_key: str = ""
+    anthropic_fallback_model: str = ""
+
     # Supabase Storage untuk attachment WhatsApp; bucket sama dengan yang dibaca UI dashboard.
     supabase_url: str = ""
     supabase_service_role_key: str = ""

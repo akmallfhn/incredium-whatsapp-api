@@ -127,7 +127,10 @@ class KnowledgeService:
     async def submit(self, req: ChatRequest) -> tuple[ChatJob, JobChannel]:
         """Simpan pertanyaan, titipkan jawabannya ke antrean, kembalikan salurannya."""
         if not self._enabled:
-            raise ApiError(503, "knowledge chat is not configured: OPENAI_API_KEY is missing")
+            raise ApiError(
+                503,
+                "knowledge chat is not configured: OPENAI_API_KEY or ANTHROPIC_API_KEY is missing",
+            )
 
         await self._tenant(req.tenant_id)
         question = req.message.strip()

@@ -29,8 +29,11 @@ ANSWER_TIMEOUT = 180.0
 
 @lru_cache(maxsize=1)
 def planner_llm() -> Runnable:
-    llm = build_llm(model=PLANNER_MODEL, max_tokens=PLANNER_MAX_TOKENS)
-    return llm.bind_tools(ToolBox.definitions())
+    return build_llm(
+        model=PLANNER_MODEL,
+        max_tokens=PLANNER_MAX_TOKENS,
+        tools=ToolBox.definitions(),
+    )
 
 
 @lru_cache(maxsize=1)
