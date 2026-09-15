@@ -38,7 +38,7 @@ Semua node menangkap exception sendiri dan menaruh pesannya di `state["error"]`,
 
 | Node | Provider | Model | Batas output |
 |---|---|---|---|
-| `evaluate` | openai | `gpt-4.1-mini` | 400 token |
+| `evaluate` | provider utama, tier `fast` | `gpt-4.1-mini` / `deepseek-flash` | 400 token |
 | `evaluate` (fallback) | anthropic | `claude-haiku-4-5-20251001` | 400 token |
 
 Structured output di OpenAI memakai `method="json_schema"`, yaitu Structured Outputs miliknya, jadi balasannya dijamin cocok dengan skema `LeadEvaluation`. Jalur Anthropic memakai default-nya, tool call — hasil akhirnya sama-sama divalidasi ke `LeadEvaluation`.
@@ -77,7 +77,9 @@ Alasannya konkurensi. Dua batch webhook untuk percakapan yang sama bisa datang h
 
 | Env | Fungsi |
 |---|---|
-| `OPENAI_API_KEY` | Jalur utama. |
+| `LLM_PROVIDER` | `openai` atau `deepseek`. Kosong = `openai`. |
+| `OPENAI_API_KEY` | Jalur utama kalau provider-nya openai. |
+| `DEEPSEEK_API_KEY` | Jalur utama kalau provider-nya deepseek; sudah siap, belum dipakai. |
 | `ANTHROPIC_API_KEY` | Cadangan waktu kuota OpenAI habis. Kosong berarti tanpa fallback. |
 | `ANTHROPIC_FALLBACK_MODEL` | Opsional; menimpa `FALLBACK_MODEL` kalau mau ganti model Haiku. |
 
@@ -87,7 +89,7 @@ Sisanya konstanta di kode, bukan env — nilainya menempel pada perilaku agent, 
 
 | Konstanta | Nilai | Lokasi |
 |---|---|---|
-| `MODEL` | `gpt-4.1-mini` | [lead_evaluation/llm.py](../../app/modules/agents/lead_evaluation/llm.py) |
+| `PROVIDER_MODELS` | peta tier ke nama model | [agents/llm.py](../../app/modules/agents/llm.py) |
 | `MAX_OUTPUT_TOKENS` | `400` | [lead_evaluation/llm.py](../../app/modules/agents/lead_evaluation/llm.py) |
 | `MAX_CHATS` | `200` | [lead_evaluation/repository.py](../../app/modules/agents/lead_evaluation/repository.py) |
 | `MAX_MESSAGE_CHARS` | `500` | [lead_evaluation/repository.py](../../app/modules/agents/lead_evaluation/repository.py) |

@@ -8,11 +8,9 @@ from langchain_core.runnables import Runnable
 
 from app.modules.agents.lead_evaluation.prompts import EVALUATION_PROMPT
 from app.modules.agents.lead_evaluation.schema import ConversationContext, LeadEvaluation
-from app.modules.agents.llm import build_llm
+from app.modules.agents.llm import Tier, build_llm
 
 logger = logging.getLogger(__name__)
-
-MODEL = "gpt-4.1-mini"
 
 # 3x balasan terpanjang yang realistis, yang terukur 129 token dengan o200k_base.
 MAX_OUTPUT_TOKENS = 400
@@ -21,7 +19,7 @@ MAX_OUTPUT_TOKENS = 400
 @lru_cache(maxsize=1)
 def structured_llm() -> Runnable:
     return build_llm(
-        model=MODEL,
+        tier=Tier.FAST,
         max_tokens=MAX_OUTPUT_TOKENS,
         structured_output=LeadEvaluation,
     )

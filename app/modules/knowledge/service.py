@@ -129,7 +129,7 @@ class KnowledgeService:
         if not self._enabled:
             raise ApiError(
                 503,
-                "knowledge chat is not configured: OPENAI_API_KEY or ANTHROPIC_API_KEY is missing",
+                "knowledge chat is not configured: no LLM API key is set",
             )
 
         await self._tenant(req.tenant_id)

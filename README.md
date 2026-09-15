@@ -95,15 +95,25 @@ dengan yang dibaca dashboard, ditambah pencarian leksikal ke `wa_conversations`/
 untuk pertanyaan kualitatif yang menyebut nama brand atau kata di dalam pesan. Konsekuensi
 yang disengaja: angka di chat dan angka di dashboard tidak akan pernah berbeda.
 
-Planner dan penjawab dipisah. Planner (`gpt-4.1-mini`) terikat ke tool dan boleh berputar;
-penjawab (`gpt-4.1`) tidak terikat tool sama sekali dan hanya membaca hasil retrieval,
+Planner dan penjawab dipisah. Planner (tier `fast`) terikat ke tool dan boleh berputar;
+penjawab (tier `full`) tidak terikat tool sama sekali dan hanya membaca hasil retrieval,
 supaya token jawaban tidak pernah terpakai memanggil tool dan jawabannya bisa di-stream
 utuh dari token pertama.
 
-Kalau kuota OpenAI habis — atau OpenAI-nya sedang down — panggilannya otomatis dialihkan
-ke Anthropic Haiku, baik di sini maupun di agent evaluasi lead. Yang dialihkan hanya
-kegagalan yang tidak akan berubah kalau diulang ke OpenAI lagi; error prompt atau schema
+Provider utamanya `openai`, dan bisa dipindah lewat `LLM_PROVIDER`. DeepSeek sudah
+tersambung penuh — paket, konfigurasi, dan peta model-nya siap — tapi belum dipakai;
+menyalakannya harus disengaja, tidak pernah terjadi sendiri karena key lain kebetulan terisi.
+Call site menyebut tier (`fast` / `full`), bukan nama model vendor, jadi pindah provider cuma
+mengganti satu baris environment — peta tier ke nama model ada di `PROVIDER_MODELS`.
+
+Kalau provider utamanya habis kuota, kehabisan saldo, atau sedang down, panggilannya otomatis
+dialihkan ke Anthropic Haiku, baik di sini maupun di agent evaluasi lead. Yang dialihkan hanya
+kegagalan yang tidak akan berubah kalau diulang ke provider yang sama; error prompt atau schema
 tetap naik apa adanya. Isi `ANTHROPIC_API_KEY` untuk menyalakannya, kosongkan untuk mematikannya.
+
+DeepSeek memakai `402` untuk saldo habis, dan openai SDK tidak punya kelas untuk status itu,
+jadi 402 diterjemahkan dulu sebelum masuk daftar fallback. Tanpa itu saldo habis akan
+mematikan agent alih-alih pindah ke cadangan.
 
 Pertanyaan yang minta nama dijawab `ListConversations` — daftar percakapan beserta brand,
 kontak, stage, dan nilainya, bisa disaring rentang tanggal, stage, dan nilai minimum. Tool
@@ -150,8 +160,9 @@ uv sync
 cp .env.example .env
 # wajib: DATABASE_URL, META_APP_SECRET, META_WEBHOOK_VERIFY_TOKEN
 # untuk attachment: SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
-# untuk stats + knowledge: CLIENT_SECRET; untuk knowledge: OPENAI_API_KEY
-# opsional: ANTHROPIC_API_KEY, dipakai otomatis kalau kuota OpenAI habis
+# untuk stats + knowledge: CLIENT_SECRET
+# untuk knowledge: LLM_PROVIDER + OPENAI_API_KEY atau DEEPSEEK_API_KEY
+# opsional: ANTHROPIC_API_KEY, dipakai otomatis kalau provider utama habis
 
 # 3. Jalankan server
 uv run dev          # http://localhost:$APP_PORT  (reload)

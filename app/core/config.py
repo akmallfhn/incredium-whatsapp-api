@@ -31,7 +31,10 @@ class Settings(BaseSettings):
     stat_timezone: str = "Asia/Jakarta"
 
     # Agent automation (LangGraph). Model & batasnya konstanta di app/modules/agents.
+    # Eksplisit, bukan ditebak dari key: pindah provider harus disengaja.
+    llm_provider: str = "openai"
     openai_api_key: str = ""
+    deepseek_api_key: str = ""
 
     # Cadangan waktu kuota OpenAI habis; kosong = tanpa fallback.
     anthropic_api_key: str = ""
