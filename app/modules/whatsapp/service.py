@@ -7,8 +7,7 @@ from typing import Any
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.tenant.entity import Tenant
-from app.modules.tenant.repository import TenantRepository
+from app.modules.meta.repository import ConnectionContext, MetaConnectionRepository
 from app.modules.whatsapp.entity import (
     CHAT_STATUS_DELIVERED,
     CHAT_STATUS_FAILED,
@@ -60,14 +59,14 @@ class WhatsAppWebhookService:
         self,
         session: AsyncSession,
         *,
-        tenants: TenantRepository,
+        connections: MetaConnectionRepository,
         conversations: WaConversationRepository,
         chats: WaChatRepository,
         media: MetaMediaClient,
         storage: SupabaseStorage,
     ) -> None:
         self._session = session
-        self._tenants = tenants
+        self._connections = connections
         self._conversations = conversations
         self._chats = chats
         self._media = media
@@ -88,30 +87,33 @@ class WhatsAppWebhookService:
                     continue
 
                 try:
-                    tenant = await self._tenants.find_by_wa_phone_number_id(phone_number_id)
+                    ctx = await self._connections.find_context_by_phone_number_id(phone_number_id)
                 except Exception:
                     await self._session.rollback()
-                    logger.exception(f"wa-meta webhook: tenant lookup failed for {phone_number_id}")
+                    logger.exception(
+                        f"wa-meta webhook: connection lookup failed for {phone_number_id}"
+                    )
                     continue
 
-                if tenant is None:
-                    logger.info(f"wa-meta webhook: no tenant for phone_number_id={phone_number_id}")
+                if ctx is None:
+                    logger.info(
+                        f"wa-meta webhook: no active connection for "
+                        f"phone_number_id={phone_number_id}"
+                    )
                     continue
 
                 if change.field == "smb_message_echoes":
-                    touched |= await self._handle_echoes(tenant, value)
+                    touched |= await self._handle_echoes(ctx, value)
                 else:
-                    touched |= await self._handle_messages(tenant, phone_number_id, value)
+                    touched |= await self._handle_messages(ctx, value)
 
                 # Status delivery tidak menambah isi percakapan, jadi tidak memicu evaluasi.
-                await self._handle_statuses(tenant, value)
+                await self._handle_statuses(ctx, value)
 
         return touched
 
     # --- Pesan masuk dari pelanggan ----------------------------------------------
-    async def _handle_messages(
-        self, tenant: Tenant, phone_number_id: str, value: dict[str, Any]
-    ) -> set[str]:
+    async def _handle_messages(self, ctx: ConnectionContext, value: dict[str, Any]) -> set[str]:
         touched: set[str] = set()
         messages = value.get("messages") or []
         if not messages:
@@ -129,8 +131,7 @@ class WhatsAppWebhookService:
             attachment = msg.get(msg_type) if not is_text else None
             if attachment is not None and msg_type in MEDIA_MESSAGE_TYPES:
                 attachment = await self._save_media_attachment(
-                    tenant=tenant,
-                    phone_number_id=phone_number_id,
+                    ctx=ctx,
                     media_type=msg_type,
                     attachment=attachment,
                 )
@@ -138,7 +139,7 @@ class WhatsAppWebhookService:
             wam_id = msg.get("id", "")
             try:
                 conv_id = await self._append_inbound_chat(
-                    tenant_id=tenant.id,
+                    tenant_id=ctx.tenant_id,
                     full_name=full_name,
                     phone_number=msg.get("from", ""),
                     wam_id=wam_id,
@@ -192,7 +193,7 @@ class WhatsAppWebhookService:
         return conv.id
 
     # --- Echo pesan yang dikirim staff dari WhatsApp Business App (coexistence) ---
-    async def _handle_echoes(self, tenant: Tenant, value: dict[str, Any]) -> set[str]:
+    async def _handle_echoes(self, ctx: ConnectionContext, value: dict[str, Any]) -> set[str]:
         touched: set[str] = set()
 
         for echo in value.get("message_echoes") or []:
@@ -204,7 +205,7 @@ class WhatsAppWebhookService:
             wam_id = echo.get("id", "")
             try:
                 conv = await self._conversations.find_or_create(
-                    tenant_id=tenant.id, full_name="", phone_number=echo.get("to", "")
+                    tenant_id=ctx.tenant_id, full_name="", phone_number=echo.get("to", "")
                 )
                 await self._chats.create(
                     conv_id=conv.id,
@@ -225,12 +226,12 @@ class WhatsAppWebhookService:
         return touched
 
     # --- Status delivery pesan keluar ---------------------------------------------
-    async def _handle_statuses(self, tenant: Tenant, value: dict[str, Any]) -> None:
+    async def _handle_statuses(self, ctx: ConnectionContext, value: dict[str, Any]) -> None:
         for status in value.get("statuses") or []:
             wam_id = status.get("id", "")
             try:
                 await self._update_status(
-                    tenant_id=tenant.id,
+                    tenant_id=ctx.tenant_id,
                     phone_number=status.get("recipient_id", ""),
                     wam_id=wam_id,
                     status=status.get("status", ""),
@@ -283,23 +284,23 @@ class WhatsAppWebhookService:
     async def _save_media_attachment(
         self,
         *,
-        tenant: Tenant,
-        phone_number_id: str,
+        ctx: ConnectionContext,
         media_type: str,
         attachment: dict[str, Any],
     ) -> dict[str, Any]:
         """Sisipkan `storage_url` ke attachment. Media gagal disimpan tidak membatalkan pesannya."""
         media_id = attachment.get("id")
-        access_token = tenant.wa_access_token or ""
-        if not access_token or not media_id or not self._storage.enabled:
+        if not ctx.access_token or not media_id or not self._storage.enabled:
             return attachment
 
         try:
             content, mime_type = await self._media.fetch(
-                access_token=access_token, phone_number_id=phone_number_id, media_id=media_id
+                access_token=ctx.access_token,
+                phone_number_id=ctx.phone_number_id,
+                media_id=media_id,
             )
             object_path = self._storage.object_path(
-                tenant.slug or tenant.id, media_type, media_id, mime_type
+                ctx.tenant_slug, media_type, media_id, mime_type
             )
             storage_url = await self._storage.upload(object_path, content, mime_type)
             return {**attachment, "storage_url": storage_url}

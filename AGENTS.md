@@ -4,7 +4,7 @@ Instructions for coding agents (Claude Code, Codex, or others) working in this r
 
 ## What this is
 
-Incredium WhatsApp API is the single Python backend for Incredium, a multitenant WhatsApp brand-deal platform. It does four things: (1) receives Meta WhatsApp Cloud API webhooks — inbound customer messages, echoes of outbound messages sent from the WhatsApp Business App (coexistence), and delivery status updates — and persists them per tenant, uploading media attachments to Supabase Storage; (2) serves read-only aggregate endpoints under `/api/v1/stats` for the 360° brand-deal evaluation dashboard; (3) runs LangGraph agents that read those conversations and write structured fields back; and (4) answers internal questions about those conversations over a streaming chat endpoint, retrieving from the same aggregates the dashboard uses. Tenant routing is by `wa_phone_number_id`: the WhatsApp number an event arrives on decides which tenant owns it.
+Incredium WhatsApp API is the single Python backend for Incredium, a multitenant WhatsApp brand-deal platform. It does four things: (1) receives Meta WhatsApp Cloud API webhooks — inbound customer messages, echoes of outbound messages sent from the WhatsApp Business App (coexistence), and delivery status updates — and persists them per tenant, uploading media attachments to Supabase Storage; (2) serves read-only aggregate endpoints under `/api/v1/stats` for the 360° brand-deal evaluation dashboard; (3) runs LangGraph agents that read those conversations and write structured fields back; and (4) answers internal questions about those conversations over a streaming chat endpoint, retrieving from the same aggregates the dashboard uses. Tenant routing is by `meta_connections.wa_phone_number_id`: the WhatsApp number an event arrives on decides which connection — and therefore which tenant — owns it.
 
 Postgres via Supabase. Deployed on Railway.
 
@@ -14,7 +14,7 @@ Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-se
 
 ## Running locally
 
-1. Copy `.env.example` to `.env` and fill in `DATABASE_URL`, the `META_*` and `SUPABASE_*` values, `CLIENT_SECRET`, the primary provider key (`OPENAI_API_KEY` or `DEEPSEEK_API_KEY`), and `ANTHROPIC_API_KEY` (the fallback used when the primary runs out of credit).
+1. Copy `.env.example` to `.env` and fill in `DATABASE_URL`, the `SUPABASE_*` values, `CLIENT_SECRET`, the primary provider key (`OPENAI_API_KEY` or `DEEPSEEK_API_KEY`), and `ANTHROPIC_API_KEY` (the fallback used when the primary runs out of credit).
 2. `uv run dev` — reload server on `:$PORT` (or `$APP_PORT` locally). `uv run start` for the non-reload variant; Railway uses the `Procfile`.
 3. No automated test suite exists yet. Verify changes with `uv run ruff check .`, `uv run ruff format --check .`, booting the app (`create_app()` must construct), and manual requests against a running server.
 
@@ -24,9 +24,10 @@ Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-se
 
 | Module | Owns |
 |---|---|
-| `whatsapp` | Meta webhook: signature check, inbound messages, outbound echoes, delivery statuses, media upload to Supabase Storage |
+| `whatsapp` | Meta webhook at `/callback/{app_id}`: signature check against that App's secret, inbound messages, outbound echoes, delivery statuses, media upload to Supabase Storage |
 | `stat` | Read-only aggregate endpoints for the dashboard — volume, response time, heatmap, lead funnel, unanswered, brand deals |
-| `tenant` | Tenant lookup by id and by `wa_phone_number_id` |
+| `tenant` | Tenant lookup by id |
+| `meta` | Meta App credentials (`meta_apps`) and per-tenant WABA connections (`meta_connections`); resolves a webhook's `phone_number_id` to its tenant and access token |
 | `agents` | LangGraph automation agents — see `docs/agents/README.md` |
 | `knowledge` | Internal Q&A chatbot: thread CRUD plus an SSE endpoint backed by a retrieval agent and a job queue — see `docs/api/knowledge.md` |
 | `health` | Liveness and database reachability |

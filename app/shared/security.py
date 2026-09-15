@@ -8,3 +8,10 @@ def verify_meta_signature(raw_body: bytes, signature_header: str, app_secret: st
         return False
     expected = hmac.new(app_secret.encode(), raw_body, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature_header.removeprefix("sha256="))
+
+
+def verify_meta_token(provided: str, expected: str) -> bool:
+    """Cocokkan hub.verify_token dalam waktu konstan, bukan `==` yang bocor lewat timing."""
+    if not provided or not expected:
+        return False
+    return hmac.compare_digest(provided, expected)

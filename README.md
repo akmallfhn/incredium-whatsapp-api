@@ -12,7 +12,7 @@ Tabel yang dipakai: `tenants`, `wa_conversations`, `wa_chats`.
 
 ```
 Meta WhatsApp Cloud API
-     │  POST /api/v1/webhook/whatsapp/callback   (signature X-Hub-Signature-256)
+     │  POST /api/v1/webhook/whatsapp/callback/<app_id>   (signature X-Hub-Signature-256)
      ▼
 [routes]   balas 200 secepatnya, proses di background task
      ▼
@@ -61,8 +61,8 @@ Menambah module baru: bikin folder di `app/modules/`, lalu daftarkan di `create_
 |---|---|---|---|
 | `GET` | `/health` | siapa saja | - |
 | `GET` | `/health/db` | monitoring | - |
-| `GET` | `/api/v1/webhook/whatsapp/callback` | Meta (verifikasi webhook) | `hub.verify_token` |
-| `POST` | `/api/v1/webhook/whatsapp/callback` | Meta (event pesan/status) | `X-Hub-Signature-256` |
+| `GET` | `/api/v1/webhook/whatsapp/callback/{app_id}` | Meta (verifikasi webhook) | `hub.verify_token` |
+| `POST` | `/api/v1/webhook/whatsapp/callback/{app_id}` | Meta (event pesan/status) | `X-Hub-Signature-256` |
 | `POST` | `/api/v1/stats/*` | dashboard TRC | `Bearer CLIENT_SECRET` |
 | `POST` | `/api/v1/knowledge/conversations*` | dashboard TRC (halaman Knowledge) | `Bearer CLIENT_SECRET` |
 | `POST` | `/api/v1/knowledge/chat/stream` | dashboard TRC (halaman Knowledge) | `Bearer CLIENT_SECRET` |
@@ -158,7 +158,7 @@ uv sync
 
 # 2. Konfigurasi environment
 cp .env.example .env
-# wajib: DATABASE_URL, META_APP_SECRET, META_WEBHOOK_VERIFY_TOKEN
+# wajib: DATABASE_URL (kredensial Meta ada di tabel meta_apps, bukan env)
 # untuk attachment: SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
 # untuk stats + knowledge: CLIENT_SECRET
 # untuk knowledge: LLM_PROVIDER + OPENAI_API_KEY atau DEEPSEEK_API_KEY
@@ -184,20 +184,30 @@ Cek koneksi database: `curl http://localhost:8000/health/db`.
 
 Di Meta App Dashboard → WhatsApp → Configuration, set:
 
-- **Callback URL**: `https://<host>/api/v1/webhook/whatsapp/callback`
-- **Verify token**: sama dengan `META_WEBHOOK_VERIFY_TOKEN`
+- **Callback URL**: `https://<host>/api/v1/webhook/whatsapp/callback/<app_id>`
+- **Verify token**: `meta_apps.webhook_verify_token` milik App tersebut
 - **Webhook fields**: `messages` (dan `smb_message_echoes` kalau pakai coexistence)
 
-Tenant di-routing lewat `tenants.wa_phone_number_id`, jadi tiap klinik cukup didaftarkan
-nomornya di tabel `tenants` — tidak ada konfigurasi per-tenant di repo ini. Download media
-memakai `tenants.wa_access_token` milik tenant yang bersangkutan.
+Segmen `<app_id>` wajib — nilainya kolom `meta_apps.app_id` (App ID numerik dari Meta,
+bukan primary key nanoid). Tanpa segmen itu kredensial App pemanggil tidak bisa
+ditentukan, jadi signature tidak bisa dicek sebelum body dipercaya. `app_id` yang tidak
+cocok satu pun baris `meta_apps` aktif ditolak 403.
 
-Kalau `META_APP_SECRET` kosong, verifikasi signature **dilewati** (hanya untuk dev lokal).
+Tenant di-routing lewat `meta_connections.wa_phone_number_id`: satu baris `meta_connections`
+= satu WABA = satu nomor. Download media memakai `meta_connections.access_token` milik
+koneksi yang bersangkutan. Koneksi atau tenant dengan `status = 'inactive'` diabaikan.
+
+`META_APP_SECRET` dan `META_WEBHOOK_VERIFY_TOKEN` sudah tidak dipakai — kredensialnya
+seluruhnya dari `meta_apps` dan dua env var itu bisa dihapus. Kalau `meta_apps.app_secret`
+kosong, verifikasi signature **dilewati** (hanya untuk dev lokal).
 
 ## Catatan Desain
 
-- **Tenant di-resolve dari `metadata.phone_number_id`**, bukan dari config — satu deployment
-  melayani semua klinik.
+- **Tenant di-resolve dari `metadata.phone_number_id`** lewat `meta_connections`, bukan dari
+  config — satu deployment melayani semua klinik dan semua App Meta.
+- **Kredensial melekat ke levelnya masing-masing**: `app_secret` dan `webhook_verify_token`
+  milik App (`meta_apps`), `access_token` milik WABA (`meta_connections`). Rotasi app secret
+  jadi satu baris, bukan satu baris per tenant.
 - **Conversation di-upsert**, bersandar pada unique constraint `(tenant_id, phone_number)`.
   Meta bisa mengirim beberapa event untuk kontak baru yang sama secara bersamaan, jadi
   cek-lalu-insert tidak aman. Nama profil di-refresh, kecuali event-nya memang tidak membawa
@@ -211,9 +221,13 @@ Kalau `META_APP_SECRET` kosong, verifikasi signature **dilewati** (hanya untuk d
 
 ## Known Gaps
 
-- **RLS mati di semua tabel** Postgres-nya. Siapa pun dengan
-  anon key bisa baca/tulis `tenants` — termasuk kolom `wa_access_token`. Perlu pass tersendiri;
-  mengaktifkan RLS tanpa policy akan mengunci app sendiri.
+- **RLS mati di semua tabel lama** Postgres-nya. Siapa pun dengan anon key bisa baca/tulis
+  `tenants`, `wa_conversations`, `wa_chats`, dan sisanya. `meta_apps` dan `meta_connections`
+  sudah RLS-on tanpa policy (tolak semua lewat anon key; role `postgres` milik API tetap
+  lolos). Tabel lainnya perlu pass tersendiri.
+- **`tenants.wa_phone_number_id`, `wa_business_id`, dan `wa_access_token` masih ada di DB**
+  tapi tidak lagi dibaca kode — sisa migrasi ke `meta_connections`, menunggu di-drop.
+- **`app_secret` dan `access_token` disimpan plaintext** di `meta_apps`/`meta_connections`.
 - **Antrean chat Knowledge ada di memori satu proses**, jadi tidak selamat dari restart
   dan tidak menyebar ke replika kedua. Lihat bagian Knowledge di atas.
 - Belum ada test suite otomatis. Verifikasi perubahan dengan `uv run ruff check app` plus

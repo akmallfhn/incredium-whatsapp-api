@@ -14,14 +14,7 @@ class Settings(BaseSettings):
     db_pool_size: int = 10
     db_max_overflow: int = 0
 
-    # Meta WhatsApp Cloud API: verifikasi webhook + download media.
-    meta_app_secret: str = ""
-    meta_webhook_verify_token: str = Field(
-        default="",
-        validation_alias=AliasChoices(
-            "META_WEBHOOK_VERIFY_TOKEN", "WHATSAPP_WEBHOOK_VERIFICATION_TOKEN"
-        ),
-    )
+    # Meta WhatsApp Cloud API: app secret & verify token per App ada di tabel meta_apps.
     graph_api_version: str = "v25.0"
 
     # Bearer token yang wajib dikirim client dashboard ke endpoint /api/v1/stats.

@@ -4,7 +4,7 @@
 -- Enumerations --
 ------------------
 
--- Enumeration for the users and tenants tables
+-- Enumeration for the users, tenants, meta_apps, and meta_connections tables
 
 CREATE TYPE status_enum AS ENUM (
   'active',
@@ -74,20 +74,6 @@ CREATE TYPE wa_alert_status_enum AS ENUM (
   'bounced'
 );
 
--- Enumeration for the kb_chats table (kbc_*)
-
-CREATE TYPE kbc_role_enum AS ENUM (
-  'user',
-  'assistant'
-);
-
-CREATE TYPE kbc_status_enum AS ENUM (
-  'queued',
-  'streaming',
-  'done',
-  'failed'
-);
-
 ------------
 -- Tables --
 ------------
@@ -124,15 +110,50 @@ CREATE TABLE tokens (
 );
 
 -- Tenants
+--
+-- Identitas organisasi saja; kredensial WhatsApp-nya ada di meta_connections.
 
 CREATE TABLE tenants (
+  id          CHAR(21)     PRIMARY KEY  DEFAULT nanoid(),
+  name        VARCHAR      NOT NULL,
+  slug        VARCHAR      NOT NULL     UNIQUE,
+  status      status_enum  NOT NULL     DEFAULT 'active',
+  created_at  TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  updated_at  TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Meta WhatsApp connections
+
+-- Satu aplikasi Meta di developers.facebook.com. app_secret dan webhook_verify_token
+-- melekat ke App, bukan ke tenant: satu App bisa menaungi banyak WABA sekaligus.
+-- app_id juga dipakai sebagai segmen callback URL, supaya signature bisa diverifikasi
+-- sebelum body webhook disentuh.
+
+CREATE TABLE meta_apps (
+  id                    CHAR(21)     PRIMARY KEY  DEFAULT nanoid(),
+  name                  VARCHAR      NOT NULL,
+  app_id                VARCHAR      NOT NULL     UNIQUE,
+  app_secret            TEXT         NOT NULL,
+  webhook_verify_token  TEXT         NOT NULL,
+  status                status_enum  NOT NULL     DEFAULT 'active',
+  created_at            TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  updated_at            TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Satu WABA milik tenant, satu baris satu nomor. wa_phone_number_id adalah kunci
+-- routing webhook: nilainya yang datang di metadata.phone_number_id tiap event.
+-- Tenant dengan nomor kedua jadi baris kedua, bukan kolom tambahan.
+
+CREATE TABLE meta_connections (
   id                  CHAR(21)     PRIMARY KEY  DEFAULT nanoid(),
-  name                VARCHAR      NOT NULL,
-  slug                VARCHAR      NOT NULL     UNIQUE,
+  tenant_id           CHAR(21)     NOT NULL,
+  meta_app_id         CHAR(21)     NOT NULL,
+  wa_business_id      VARCHAR      NOT NULL     UNIQUE,
+  wa_phone_number_id  VARCHAR      NOT NULL     UNIQUE,
+  display_number      VARCHAR          NULL,
+  access_token        TEXT             NULL,
+  token_expires_at    TIMESTAMPTZ      NULL,
   status              status_enum  NOT NULL     DEFAULT 'active',
-  wa_phone_number_id  VARCHAR          NULL     UNIQUE,
-  wa_business_id      VARCHAR          NULL,
-  wa_access_token     TEXT             NULL,
   created_at          TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
   updated_at          TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP
 );
@@ -187,28 +208,6 @@ CREATE TABLE wa_alerts (
   updated_at        TIMESTAMPTZ           NOT NULL  DEFAULT CURRENT_TIMESTAMP
 );
 
--- Knowledge chat
-
-CREATE TABLE kb_conversations (
-  id          CHAR(21)     PRIMARY KEY  DEFAULT nanoid(),
-  tenant_id   CHAR(21)     NOT NULL,
-  title       VARCHAR      NOT NULL     DEFAULT '',
-  created_at  TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
-  updated_at  TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE kb_chats (
-  id          CHAR(21)         PRIMARY KEY  DEFAULT nanoid(),
-  conv_id     CHAR(21)         NOT NULL,
-  role        kbc_role_enum    NOT NULL,
-  message     VARCHAR          NOT NULL     DEFAULT '',
-  status      kbc_status_enum      NULL,
-  error       VARCHAR              NULL,
-  sources     JSON                 NULL,
-  created_at  TIMESTAMPTZ      NOT NULL     DEFAULT CURRENT_TIMESTAMP,
-  updated_at  TIMESTAMPTZ      NOT NULL     DEFAULT CURRENT_TIMESTAMP
-);
-
 ----------------
 -- References --
 ----------------
@@ -220,6 +219,12 @@ ALTER TABLE users
 
 ALTER TABLE tokens
   ADD FOREIGN KEY (user_id) REFERENCES users (id);
+
+-- Meta WhatsApp connections
+
+ALTER TABLE meta_connections
+  ADD FOREIGN KEY (tenant_id)   REFERENCES tenants (id),
+  ADD FOREIGN KEY (meta_app_id) REFERENCES meta_apps (id);
 
 -- WhatsApp chat
 
@@ -235,37 +240,17 @@ ALTER TABLE wa_chats
 ALTER TABLE wa_alerts
   ADD FOREIGN KEY (conv_id) REFERENCES wa_conversations (id);
 
--- Knowledge chat
-
-ALTER TABLE kb_conversations
-  ADD FOREIGN KEY (tenant_id) REFERENCES tenants (id);
-
-ALTER TABLE kb_chats
-  ADD FOREIGN KEY (conv_id) REFERENCES kb_conversations (id) ON DELETE CASCADE;
-
 -------------
 -- Indexes --
 -------------
+
+-- Meta WhatsApp connections
+
+CREATE INDEX meta_connections_tenant_id_idx    ON meta_connections (tenant_id);
+CREATE INDEX meta_connections_meta_app_id_idx  ON meta_connections (meta_app_id);
 
 -- WhatsApp chat
 
 CREATE INDEX wa_conversations_tenant_id_idx  ON wa_conversations (tenant_id);
 CREATE INDEX wa_chats_conv_id_idx            ON wa_chats (conv_id);
 CREATE INDEX wa_alerts_conv_id_idx           ON wa_alerts (conv_id);
-
--- Knowledge chat
-
-CREATE INDEX kb_conversations_tenant_id_idx  ON kb_conversations (tenant_id, updated_at DESC);
-CREATE INDEX kb_chats_conv_id_idx            ON kb_chats (conv_id, created_at);
-
--- Retriever leksikal Knowledge; ILIKE brand/pesan tanpa ini jadi seq scan penuh.
-
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-
-CREATE INDEX wa_conversations_brand_name_trgm_idx
-  ON wa_conversations USING GIN (brand_name gin_trgm_ops);
-CREATE INDEX wa_conversations_full_name_trgm_idx
-  ON wa_conversations USING GIN (full_name gin_trgm_ops);
-CREATE INDEX wa_chats_message_trgm_idx
-  ON wa_chats USING GIN (message gin_trgm_ops);
--- Di database yang sudah jalan, ketiganya dibuat CONCURRENTLY; lihat docs/db/knowledge.sql.

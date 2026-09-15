@@ -19,6 +19,7 @@ from app.modules.knowledge.queue import ChatJob, ChatQueue, JobChannel
 from app.modules.knowledge.repository import KnowledgeRepository, RetrievalRepository
 from app.modules.knowledge.routes import register_knowledge_routes
 from app.modules.knowledge.service import ChatRunner, KnowledgeService
+from app.modules.meta.repository import MetaConnectionRepository
 from app.modules.stat.repository import StatRepository
 from app.modules.stat.routes import register_stat_routes
 from app.modules.stat.service import StatService
@@ -38,7 +39,7 @@ def build_whatsapp_service(session: AsyncSession) -> WhatsAppWebhookService:
     client = http_client()
     return WhatsAppWebhookService(
         session,
-        tenants=TenantRepository(session),
+        connections=MetaConnectionRepository(session),
         conversations=WaConversationRepository(session),
         chats=WaChatRepository(session),
         media=MetaMediaClient(client, settings.graph_api_version),
