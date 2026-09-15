@@ -4,7 +4,7 @@ Instructions for coding agents (Claude Code, Codex, or others) working in this r
 
 ## What this is
 
-Pureva API is the single Python backend for Pureva, a multitenant WhatsApp brand-deal platform. It does four things: (1) receives Meta WhatsApp Cloud API webhooks — inbound customer messages, echoes of outbound messages sent from the WhatsApp Business App (coexistence), and delivery status updates — and persists them per tenant, uploading media attachments to Supabase Storage; (2) serves read-only aggregate endpoints under `/api/v1/stats` for the 360° brand-deal evaluation dashboard; (3) runs LangGraph agents that read those conversations and write structured fields back; and (4) answers internal questions about those conversations over a streaming chat endpoint, retrieving from the same aggregates the dashboard uses. Tenant routing is by `wa_phone_number_id`: the WhatsApp number an event arrives on decides which tenant owns it.
+Incredium WhatsApp API is the single Python backend for Incredium, a multitenant WhatsApp brand-deal platform. It does four things: (1) receives Meta WhatsApp Cloud API webhooks — inbound customer messages, echoes of outbound messages sent from the WhatsApp Business App (coexistence), and delivery status updates — and persists them per tenant, uploading media attachments to Supabase Storage; (2) serves read-only aggregate endpoints under `/api/v1/stats` for the 360° brand-deal evaluation dashboard; (3) runs LangGraph agents that read those conversations and write structured fields back; and (4) answers internal questions about those conversations over a streaming chat endpoint, retrieving from the same aggregates the dashboard uses. Tenant routing is by `wa_phone_number_id`: the WhatsApp number an event arrives on decides which tenant owns it.
 
 Postgres via Supabase. Deployed on Railway.
 
@@ -55,7 +55,7 @@ Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-se
 **The schema is never generated from this code.** SQLAlchemy emits no DDL, so a schema change has to land in **two** places or things drift:
 
 1. The live Supabase project, via the `apply_migration` MCP tool.
-2. `docs/db/pureva.sql` — a hand-maintained reference DDL in the same format as `ordina-ddl.sql`. It is documentation, not a migration runner. A change that has to run standalone gets its own file beside it, like `docs/db/knowledge.sql`.
+2. `docs/db/incredium.sql` — a hand-maintained reference DDL in the same format as `ordina-ddl.sql`. It is documentation, not a migration runner. A change that has to run standalone gets its own file beside it, like `docs/db/knowledge.sql`.
 
 The SQLAlchemy entities are a read-write mirror of that DDL, which is why their enums use `create_type=False`. Note that `id` defaults depend on a `nanoid()` function existing in the database.
 

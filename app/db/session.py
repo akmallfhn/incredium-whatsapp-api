@@ -1,4 +1,4 @@
-"""Koneksi async SQLAlchemy ke Postgres pureva; engine lazy agar import jalan tanpa DATABASE_URL."""
+"""Koneksi async SQLAlchemy ke Postgres Incredium; engine dibuat lazy."""
 
 import logging
 from collections.abc import AsyncIterator
@@ -49,7 +49,7 @@ def init_engine() -> AsyncEngine:
     if not settings.database_url:
         raise RuntimeError(
             "DATABASE_URL must be set: the WhatsApp webhook persists straight into"
-            " the pureva Postgres"
+            " the Incredium Postgres"
         )
 
     url, connect_args = normalize_database_url(settings.database_url)

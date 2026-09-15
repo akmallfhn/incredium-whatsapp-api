@@ -1,4 +1,4 @@
--- PostgreSQL Database for Pureva
+-- PostgreSQL Database for Incredium
 
 ------------------
 -- Enumerations --

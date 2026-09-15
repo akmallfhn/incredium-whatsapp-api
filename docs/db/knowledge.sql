@@ -1,6 +1,6 @@
 -- Migrasi: tabel chat Knowledge (kb_*)
 --
--- Jalankan sekali di Supabase pureva. Aditif — tidak menyentuh tabel yang sudah ada.
+-- Jalankan sekali di Supabase Incredium. Aditif — tidak menyentuh tabel yang sudah ada.
 
 ------------------
 -- Enumerations --

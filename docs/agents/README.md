@@ -1,6 +1,6 @@
 # Agents
 
-Agent automation yang jalan di atas database Pureva. Semuanya LangGraph, dipicu dari alur yang sudah ada (webhook, endpoint, atau scheduler), dan menulis balik ke Postgres yang sama.
+Agent automation yang jalan di atas database Incredium. Semuanya LangGraph, dipicu dari alur yang sudah ada (webhook, endpoint, atau scheduler), dan menulis balik ke Postgres yang sama.
 
 | Agent | Pemicu | Yang diubah |
 |---|---|---|

@@ -3,13 +3,13 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    app_name: str = "Pureva API"
+    app_name: str = "Incredium WhatsApp API"
     debug: bool = False
 
     # Railway (dan PaaS lain) inject PORT saat runtime; APP_PORT fallback lokal.
     port: int = Field(default=8000, validation_alias=AliasChoices("PORT", "APP_PORT"))
 
-    # Postgres multitenant pureva di Supabase.
+    # Postgres multitenant Incredium di Supabase.
     database_url: str = ""
     db_pool_size: int = 10
     db_max_overflow: int = 0
@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     # Supabase Storage untuk attachment WhatsApp; bucket sama dengan yang dibaca UI dashboard.
     supabase_url: str = ""
     supabase_service_role_key: str = ""
+    # Sengaja tetap "pureva": menggantinya migrasi file, bukan rename.
     supabase_bucket: str = "pureva"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}

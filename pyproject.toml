@@ -1,7 +1,7 @@
 [project]
-name = "pureva-api"
+name = "incredium-whatsapp-api"
 version = "0.1.0"
-description = "Single backend Pureva: webhook WhatsApp Cloud API -> Postgres multitenant (FastAPI)"
+description = "Single backend Incredium: webhook WhatsApp Cloud API -> Postgres multitenant (FastAPI)"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",
