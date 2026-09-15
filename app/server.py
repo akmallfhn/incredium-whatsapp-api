@@ -14,6 +14,9 @@ from app.modules.agents.lead_evaluation.llm import evaluate_with_llm
 from app.modules.agents.lead_evaluation.repository import LeadEvalRepository
 from app.modules.agents.lead_evaluation.service import LeadEvaluationService
 from app.modules.agents.llm import is_configured
+from app.modules.auth.repository import AuthRepository
+from app.modules.auth.routes import register_auth_routes
+from app.modules.auth.service import AuthService
 from app.modules.health.routes import register_health_routes
 from app.modules.knowledge.queue import ChatJob, ChatQueue, JobChannel
 from app.modules.knowledge.repository import KnowledgeRepository, RetrievalRepository
@@ -33,6 +36,10 @@ from app.shared.response import ApiError, api_error_handler, error
 from app.shared.storage import SupabaseStorage
 
 logger = logging.getLogger(__name__)
+
+
+def build_auth_service(session: AsyncSession) -> AuthService:
+    return AuthService(session, repo=AuthRepository(session))
 
 
 def build_whatsapp_service(session: AsyncSession) -> WhatsAppWebhookService:
@@ -126,6 +133,7 @@ def create_app() -> FastAPI:
     register_health_routes(app.router)
 
     api = APIRouter(prefix="/api/v1")
+    register_auth_routes(api, build_auth_service)
     register_whatsapp_routes(api, build_whatsapp_service, build_lead_evaluation_service)
     register_stat_routes(api, build_stat_service)
     register_knowledge_routes(api, build_knowledge_service)

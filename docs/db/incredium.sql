@@ -11,6 +11,14 @@ CREATE TYPE status_enum AS ENUM (
   'inactive'
 );
 
+-- Enumeration for the users table
+
+CREATE TYPE user_role_enum AS ENUM (
+  'Super Admin',
+  'Administrator',
+  'Member'
+);
+
 -- Enumeration for the wa_conversations table (wa_*)
 
 CREATE TYPE wa_lead_status_enum AS ENUM (
@@ -78,40 +86,38 @@ CREATE TYPE wa_alert_status_enum AS ENUM (
 -- Tables --
 ------------
 
--- Lookup tables
-
-CREATE TABLE roles (
-  id          SMALLSERIAL  PRIMARY KEY,
-  name        VARCHAR      NOT NULL  UNIQUE,
-  permission  SMALLINT     NOT NULL,
-  created_at  TIMESTAMPTZ  NOT NULL  DEFAULT CURRENT_TIMESTAMP,
-  updated_at  TIMESTAMPTZ  NOT NULL  DEFAULT CURRENT_TIMESTAMP
-);
-
 -- User data
 
 CREATE TABLE users (
-  id          UUID         PRIMARY KEY  DEFAULT gen_random_uuid(),
-  full_name   VARCHAR      NOT NULL,
-  email       VARCHAR      NOT NULL     UNIQUE,
-  avatar      VARCHAR          NULL,
-  role_id     SMALLINT     NOT NULL     DEFAULT 2,
-  status      status_enum  NOT NULL     DEFAULT 'active',
-  created_at  TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
-  updated_at  TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP
+  id             UUID            PRIMARY KEY  DEFAULT gen_random_uuid(),
+  full_name      VARCHAR         NOT NULL,
+  email          VARCHAR         NOT NULL     UNIQUE,
+  avatar         VARCHAR             NULL,
+  role           user_role_enum  NOT NULL     DEFAULT 'Member',
+  password_hash  TEXT                NULL,
+  status         status_enum     NOT NULL     DEFAULT 'active',
+  created_at     TIMESTAMPTZ     NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  updated_at     TIMESTAMPTZ     NOT NULL     DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE tokens (
   id          SERIAL       PRIMARY KEY,
   user_id     UUID         NOT NULL,
-  is_active   BOOLEAN      NOT NULL  DEFAULT FALSE,
+  is_active   BOOLEAN      NOT NULL  DEFAULT TRUE,
   token       TEXT         NOT NULL  UNIQUE,
+  expires_at  TIMESTAMPTZ  NOT NULL,
   created_at  TIMESTAMPTZ  NOT NULL  DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE users_access (
+  id          SERIAL       PRIMARY KEY,
+  user_id     UUID         NOT NULL,
+  tenant_id   CHAR(21)     NOT NULL,
+  created_at  TIMESTAMPTZ  NOT NULL  DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (user_id, tenant_id)
+);
+
 -- Tenants
---
--- Identitas organisasi saja; kredensial WhatsApp-nya ada di meta_connections.
 
 CREATE TABLE tenants (
   id          CHAR(21)     PRIMARY KEY  DEFAULT nanoid(),
@@ -124,11 +130,6 @@ CREATE TABLE tenants (
 
 -- Meta WhatsApp connections
 
--- Satu aplikasi Meta di developers.facebook.com. app_secret dan webhook_verify_token
--- melekat ke App, bukan ke tenant: satu App bisa menaungi banyak WABA sekaligus.
--- app_id juga dipakai sebagai segmen callback URL, supaya signature bisa diverifikasi
--- sebelum body webhook disentuh.
-
 CREATE TABLE meta_apps (
   id                    CHAR(21)     PRIMARY KEY  DEFAULT nanoid(),
   name                  VARCHAR      NOT NULL,
@@ -139,10 +140,6 @@ CREATE TABLE meta_apps (
   created_at            TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
   updated_at            TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP
 );
-
--- Satu WABA milik tenant, satu baris satu nomor. wa_phone_number_id adalah kunci
--- routing webhook: nilainya yang datang di metadata.phone_number_id tiap event.
--- Tenant dengan nomor kedua jadi baris kedua, bukan kolom tambahan.
 
 CREATE TABLE meta_connections (
   id                  CHAR(21)     PRIMARY KEY  DEFAULT nanoid(),
@@ -214,11 +211,12 @@ CREATE TABLE wa_alerts (
 
 -- User data
 
-ALTER TABLE users
-  ADD FOREIGN KEY (role_id) REFERENCES roles (id);
-
 ALTER TABLE tokens
-  ADD FOREIGN KEY (user_id) REFERENCES users (id);
+  ADD FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE;
+
+ALTER TABLE users_access
+  ADD FOREIGN KEY (user_id)   REFERENCES users (id)   ON DELETE CASCADE,
+  ADD FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE;
 
 -- Meta WhatsApp connections
 
@@ -243,6 +241,12 @@ ALTER TABLE wa_alerts
 -------------
 -- Indexes --
 -------------
+
+-- User data
+
+CREATE INDEX tokens_user_id_idx          ON tokens (user_id);
+CREATE INDEX users_access_user_id_idx    ON users_access (user_id);
+CREATE INDEX users_access_tenant_id_idx  ON users_access (tenant_id);
 
 -- Meta WhatsApp connections
 

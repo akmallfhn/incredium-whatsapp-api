@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     # Bearer token yang wajib dikirim client dashboard ke endpoint /api/v1/stats.
     client_secret: str = ""
 
+    # Kunci tanda tangan JWT sesi login. Ganti nilainya = semua sesi berjalan mati.
+    jwt_secret: str = ""
+    jwt_ttl_days: int = 365
+
     # Zona waktu default untuk bucket harian & heatmap statistik.
     stat_timezone: str = "Asia/Jakarta"
 

@@ -24,6 +24,7 @@ Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-se
 
 | Module | Owns |
 |---|---|
+| `auth` | Email/password login issuing a 1-year HS256 JWT, session check, logout that deletes the session row in `tokens`, user roles and per-tenant access — see `docs/api/auth.md` |
 | `whatsapp` | Meta webhook at `/callback/{app_id}`: signature check against that App's secret, inbound messages, outbound echoes, delivery statuses, media upload to Supabase Storage |
 | `stat` | Read-only aggregate endpoints for the dashboard — volume, response time, heatmap, lead funnel, unanswered, brand deals |
 | `tenant` | Tenant lookup by id |
@@ -31,7 +32,7 @@ Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-se
 | `agents` | LangGraph automation agents — see `docs/agents/README.md` |
 | `knowledge` | Internal Q&A chatbot: thread CRUD plus an SSE endpoint backed by a retrieval agent and a job queue — see `docs/api/knowledge.md` |
 | `health` | Liveness and database reachability |
-| `shared` | Response envelope, `ApiError`, Bearer auth, pagination, shared httpx client, Meta signature verification, Supabase Storage client |
+| `shared` | Response envelope, `ApiError`, Bearer auth, pagination, shared httpx client, Meta signature verification, bcrypt/JWT primitives, Supabase Storage client |
 | `core`, `db` | Settings and the lazy async engine/session factory |
 
 ## Conventions — follow these exactly, they're load-bearing

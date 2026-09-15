@@ -61,6 +61,9 @@ Menambah module baru: bikin folder di `app/modules/`, lalu daftarkan di `create_
 |---|---|---|---|
 | `GET` | `/health` | siapa saja | - |
 | `GET` | `/health/db` | monitoring | - |
+| `POST` | `/api/v1/auth/login` | dashboard TRC | `Bearer CLIENT_SECRET` |
+| `GET` | `/api/v1/auth/check-session` | dashboard TRC | `Bearer <JWT>` |
+| `POST` | `/api/v1/auth/logout` | dashboard TRC | `Bearer <JWT>` |
 | `GET` | `/api/v1/webhook/whatsapp/callback/{app_id}` | Meta (verifikasi webhook) | `hub.verify_token` |
 | `POST` | `/api/v1/webhook/whatsapp/callback/{app_id}` | Meta (event pesan/status) | `X-Hub-Signature-256` |
 | `POST` | `/api/v1/stats/*` | dashboard TRC | `Bearer CLIENT_SECRET` |
@@ -201,6 +204,25 @@ koneksi yang bersangkutan. Koneksi atau tenant dengan `status = 'inactive'` diab
 seluruhnya dari `meta_apps` dan dua env var itu bisa dihapus. Kalau `meta_apps.app_secret`
 kosong, verifikasi signature **dilewati** (hanya untuk dev lokal).
 
+## Auth
+
+`POST /auth/login` menerima email + password dan dijaga `CLIENT_SECRET`; balasannya JWT
+HS256 berumur `JWT_TTL_DAYS` (default 365 hari). `GET /auth/check-session` memvalidasi JWT dan
+mengembalikan profil pemiliknya. `POST /auth/logout` dijaga JWT itu sendiri dan menghapus
+barisnya di `tokens`, jadi token yang sama langsung ditolak.
+
+JWT tidak dipercaya dari tanda tangannya saja: tiap pemakaian dicocokkan ke baris
+`tokens` yang masih hidup, karena tanpa itu logout tidak akan berarti apa-apa selama
+setahun ke depan. Kolom `tokens.token` menyimpan JWT-nya apa adanya, jadi siapa pun yang
+bisa membaca tabel itu bisa memakai sesinya. Password di-hash bcrypt. Email tak terdaftar
+dan password salah menghasilkan balasan yang sama supaya daftar email tidak bisa ditebak.
+
+Peran ada di kolom `users.role` (`Super Admin`, `Administrator`, `Member`). Tenant yang
+boleh diakses seorang user ada di `users_access`, many-to-many terhadap `tenants`.
+Mengganti `JWT_SECRET` mematikan semua sesi yang sedang berjalan.
+
+Detail endpoint-nya di [docs/api/auth.md](docs/api/auth.md).
+
 ## Catatan Desain
 
 - **Tenant di-resolve dari `metadata.phone_number_id`** lewat `meta_connections`, bukan dari
@@ -225,9 +247,9 @@ kosong, verifikasi signature **dilewati** (hanya untuk dev lokal).
   `tenants`, `wa_conversations`, `wa_chats`, dan sisanya. `meta_apps` dan `meta_connections`
   sudah RLS-on tanpa policy (tolak semua lewat anon key; role `postgres` milik API tetap
   lolos). Tabel lainnya perlu pass tersendiri.
-- **`tenants.wa_phone_number_id`, `wa_business_id`, dan `wa_access_token` masih ada di DB**
-  tapi tidak lagi dibaca kode — sisa migrasi ke `meta_connections`, menunggu di-drop.
 - **`app_secret` dan `access_token` disimpan plaintext** di `meta_apps`/`meta_connections`.
+- **Belum ada endpoint bikin/ubah user.** Baris `users`, `password_hash`, dan
+  `users_access` untuk sekarang diisi manual lewat SQL.
 - **Antrean chat Knowledge ada di memori satu proses**, jadi tidak selamat dari restart
   dan tidak menyebar ke replika kedua. Lihat bagian Knowledge di atas.
 - Belum ada test suite otomatis. Verifikasi perubahan dengan `uv run ruff check app` plus
