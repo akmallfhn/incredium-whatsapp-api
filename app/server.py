@@ -8,6 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.requests import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import constants
 from app.core.config import settings
 from app.db.session import dispose_engine, init_engine, session_scope
 from app.modules.agents.lead_evaluation.llm import evaluate_with_llm
@@ -54,7 +55,7 @@ def build_whatsapp_service(session: AsyncSession) -> WhatsAppWebhookService:
             client,
             base_url=settings.supabase_url,
             service_role_key=settings.supabase_service_role_key,
-            bucket=settings.supabase_bucket,
+            bucket=constants.SUPABASE_BUCKET,
         ),
     )
 

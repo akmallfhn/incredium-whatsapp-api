@@ -10,7 +10,7 @@ Postgres via Supabase. Deployed on Railway.
 
 ## Stack
 
-Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-settings, httpx. LangGraph + LangChain for agents: `langchain-openai` or `langchain-deepseek` as the primary provider (selected by `LLM_PROVIDER`), `langchain-anthropic` always as the fallback. `uv` for dependencies, `ruff` for lint and format.
+Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-settings, httpx. LangGraph + LangChain for agents: `langchain-openai` or `langchain-deepseek` as the primary provider (`LLM_PROVIDER` in `app/core/constants.py`), `langchain-anthropic` always as the fallback. `uv` for dependencies, `ruff` for lint and format.
 
 ## Running locally
 

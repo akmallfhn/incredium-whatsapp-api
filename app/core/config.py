@@ -22,26 +22,17 @@ class Settings(BaseSettings):
 
     # Kunci tanda tangan JWT sesi login. Ganti nilainya = semua sesi berjalan mati.
     jwt_secret: str = ""
-    jwt_ttl_days: int = 365
 
-    # Zona waktu default untuk bucket harian & heatmap statistik.
-    stat_timezone: str = "Asia/Jakarta"
-
-    # Agent automation (LangGraph). Model & batasnya konstanta di app/modules/agents.
-    # Eksplisit, bukan ditebak dari key: pindah provider harus disengaja.
-    llm_provider: str = "openai"
+    # Agent automation (LangGraph). Provider & modelnya konstanta di app/core/constants.py.
     openai_api_key: str = ""
     deepseek_api_key: str = ""
 
-    # Cadangan waktu kuota OpenAI habis; kosong = tanpa fallback.
+    # Cadangan waktu kuota provider utama habis; kosong = tanpa fallback.
     anthropic_api_key: str = ""
-    anthropic_fallback_model: str = ""
 
     # Supabase Storage untuk attachment WhatsApp; bucket sama dengan yang dibaca UI dashboard.
     supabase_url: str = ""
     supabase_service_role_key: str = ""
-    # Sengaja tetap "pureva": menggantinya migrasi file, bukan rename.
-    supabase_bucket: str = "pureva"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 

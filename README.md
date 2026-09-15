@@ -103,7 +103,7 @@ penjawab (tier `full`) tidak terikat tool sama sekali dan hanya membaca hasil re
 supaya token jawaban tidak pernah terpakai memanggil tool dan jawabannya bisa di-stream
 utuh dari token pertama.
 
-Provider utamanya `openai`, dan bisa dipindah lewat `LLM_PROVIDER`. DeepSeek sudah
+Provider utamanya `openai`, dan bisa dipindah lewat `LLM_PROVIDER` di `app/core/constants.py`. DeepSeek sudah
 tersambung penuh — paket, konfigurasi, dan peta model-nya siap — tapi belum dipakai;
 menyalakannya harus disengaja, tidak pernah terjadi sendiri karena key lain kebetulan terisi.
 Call site menyebut tier (`fast` / `full`), bukan nama model vendor, jadi pindah provider cuma
@@ -163,8 +163,9 @@ uv sync
 cp .env.example .env
 # wajib: DATABASE_URL (kredensial Meta ada di tabel meta_apps, bukan env)
 # untuk attachment: SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
-# untuk stats + knowledge: CLIENT_SECRET
-# untuk knowledge: LLM_PROVIDER + OPENAI_API_KEY atau DEEPSEEK_API_KEY
+# untuk stats + knowledge + login: CLIENT_SECRET
+# untuk login dashboard: JWT_SECRET
+# untuk knowledge: OPENAI_API_KEY atau DEEPSEEK_API_KEY (sesuai LLM_PROVIDER di constants.py)
 # opsional: ANTHROPIC_API_KEY, dipakai otomatis kalau provider utama habis
 
 # 3. Jalankan server
@@ -207,7 +208,7 @@ kosong, verifikasi signature **dilewati** (hanya untuk dev lokal).
 ## Auth
 
 `POST /auth/login` menerima email + password dan dijaga `CLIENT_SECRET`; balasannya JWT
-HS256 berumur `JWT_TTL_DAYS` (default 365 hari). `GET /auth/check-session` memvalidasi JWT dan
+HS256 berumur `JWT_TTL_DAYS` hari (365, konstanta di `app/core/constants.py`). `GET /auth/check-session` memvalidasi JWT dan
 mengembalikan profil pemiliknya. `POST /auth/logout` dijaga JWT itu sendiri dan menghapus
 barisnya di `tokens`, jadi token yang sama langsung ditolak.
 

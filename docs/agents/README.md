@@ -22,7 +22,7 @@ app/modules/agents/
 
 ## Aturan bersama
 
-- **Provider utama bisa dipilih**: `LLM_PROVIDER` (`openai` atau `deepseek`, default `openai`) menentukan jalur utama, key-nya `OPENAI_API_KEY` atau `DEEPSEEK_API_KEY`, dan `ANTHROPIC_API_KEY` selalu jadi cadangannya. DeepSeek sudah tersambung penuh tapi belum dipakai; menyalakannya harus disengaja, tidak pernah terjadi sendiri. Batas token tetap konstanta di kode karena menempel pada perilaku agent.
+- **Provider utama bisa dipilih**: `LLM_PROVIDER` di `app/core/constants.py` (`openai` atau `deepseek`) menentukan jalur utama, key-nya `OPENAI_API_KEY` atau `DEEPSEEK_API_KEY`, dan `ANTHROPIC_API_KEY` selalu jadi cadangannya. DeepSeek sudah tersambung penuh tapi belum dipakai; menyalakannya harus disengaja, tidak pernah terjadi sendiri. Batas token tetap konstanta di kode karena menempel pada perilaku agent.
 - **Call site menyebut tier, bukan nama model.** `build_llm(tier=Tier.FAST)` untuk node yang cuma memilih tool atau mengisi kolom, `Tier.FULL` untuk jawaban yang dibaca orang. Peta tier ke nama model vendor cuma ada di satu tempat, `PROVIDER_MODELS`, jadi ganti provider tidak menyentuh modul agent mana pun.
 - **Gagal tanpa menjatuhkan apa pun.** Setiap node menangkap exception-nya sendiri dan menaruh pesannya di `state["error"]`. Agent yang gagal berakhir sebagai baris log, tidak pernah membatalkan alur yang memicunya.
 - **Mati kalau tidak dikonfigurasi.** Tanpa satu pun API key, `is_configured()` mengembalikan `False` dan service berhenti di awal.

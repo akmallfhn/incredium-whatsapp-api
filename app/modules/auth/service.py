@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import constants
 from app.core.config import settings
 from app.modules.auth.entity import User
 from app.modules.auth.repository import AuthRepository
@@ -41,7 +42,7 @@ class AuthService:
             raise ApiError(401, INVALID_CREDENTIALS)
 
         now = datetime.now(timezone.utc)
-        expires_at = now + timedelta(days=settings.jwt_ttl_days)
+        expires_at = now + timedelta(days=constants.JWT_TTL_DAYS)
         token = encode_jwt(
             {
                 "sub": user.id,

@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
+from app.core import constants
 from app.modules.agents.lead_evaluation.schema import ConversationContext
 
 # Pesan panjang dipotong supaya satu percakapan ramai tidak menghabiskan context window.
@@ -33,7 +33,7 @@ _SPEAKER = {"inbound": "Pelanggan", "outbound": "Kami"}
 
 def _tz() -> ZoneInfo:
     try:
-        return ZoneInfo(settings.stat_timezone)
+        return ZoneInfo(constants.STAT_TIMEZONE)
     except (ZoneInfoNotFoundError, ValueError):
         return ZoneInfo("UTC")
 

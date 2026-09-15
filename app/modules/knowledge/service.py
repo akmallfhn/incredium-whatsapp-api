@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app.core.config import settings
+from app.core import constants
 from app.modules.knowledge.entity import (
     ROLE_ASSISTANT,
     ROLE_USER,
@@ -244,7 +244,7 @@ class ChatRunner:
         await channel.publish("title", title)
 
     async def _system_prompt(self, tenant_id: str) -> str:
-        tz_name = settings.stat_timezone
+        tz_name = constants.STAT_TIMEZONE
         try:
             tz = ZoneInfo(tz_name)
         except (ZoneInfoNotFoundError, ValueError):

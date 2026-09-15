@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app.core.config import settings
+from app.core import constants
 from app.modules.stat.repository import StatRepository
 from app.modules.stat.schema import (
     BrandListRequest,
@@ -38,7 +38,7 @@ class StatService:
         """Validasi tenant + rentang tanggal, lalu ubah tanggal lokal jadi batas timestamptz."""
         await self._tenant(req.tenant_id)
 
-        tz_name = req.timezone or settings.stat_timezone
+        tz_name = req.timezone or constants.STAT_TIMEZONE
         try:
             tz = ZoneInfo(tz_name)
         except (ZoneInfoNotFoundError, ValueError):
@@ -60,7 +60,7 @@ class StatService:
         self, req: ConversationListRequest
     ) -> tuple[datetime | None, datetime | None, str]:
         """Seperti _scope tapi tanggal boleh kosong; kosong berarti tanpa batas, bukan default."""
-        tz_name = req.timezone or settings.stat_timezone
+        tz_name = req.timezone or constants.STAT_TIMEZONE
         try:
             tz = ZoneInfo(tz_name)
         except (ZoneInfoNotFoundError, ValueError):

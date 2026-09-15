@@ -9,6 +9,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import Runnable, RunnableBinding
 
+from app.core import constants
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -29,9 +30,6 @@ PROVIDER_MODELS: dict[str, dict[str, str]] = {
     "deepseek": {Tier.FAST: "deepseek-flash", Tier.FULL: "deepseek-v4-pro"},
 }
 
-# Satu model untuk semua node fallback: yang dikejar ketersediaan, bukan kualitas maksimal.
-FALLBACK_MODEL = "claude-haiku-4-5-20251001"
-
 # Kegagalan yang tidak berubah kalau diulang ke provider yang sama; prompt/schema salah tidak.
 FALLBACK_EXCEPTIONS = (
     openai.RateLimitError,
@@ -47,7 +45,7 @@ BILLING_STATUS = 402
 
 def provider() -> str:
     """Provider utama, selalu dari pilihan eksplisit; tidak pernah menebak sendiri."""
-    dipilih = (settings.llm_provider or "openai").strip().lower()
+    dipilih = (constants.LLM_PROVIDER or "openai").strip().lower()
     if dipilih not in PROVIDER_MODELS:
         raise RuntimeError(
             f"LLM_PROVIDER tidak dikenal: {dipilih}; pilihannya {sorted(PROVIDER_MODELS)}"
@@ -106,7 +104,7 @@ def _primary(tier: Tier, max_tokens: int, timeout: float) -> BaseChatModel:
 
 def _anthropic(max_tokens: int, timeout: float) -> BaseChatModel:
     return ChatAnthropic(
-        model=settings.anthropic_fallback_model or FALLBACK_MODEL,
+        model=constants.ANTHROPIC_FALLBACK_MODEL,
         api_key=settings.anthropic_api_key,
         max_tokens=max_tokens,
         timeout=timeout,
@@ -131,7 +129,11 @@ def _prepare(
 
 
 def _log_fallback(*_: Any) -> None:
-    logger.warning("%s tidak bisa dipakai, panggilan dialihkan ke %s", provider(), FALLBACK_MODEL)
+    logger.warning(
+        "%s tidak bisa dipakai, panggilan dialihkan ke %s",
+        provider(),
+        constants.ANTHROPIC_FALLBACK_MODEL,
+    )
 
 
 def build_llm(

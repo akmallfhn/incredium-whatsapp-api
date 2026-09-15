@@ -4,7 +4,7 @@ Login email + password untuk dashboard TRC, penerbitan JWT, pemeriksaan sesi, da
 
 Ada dua jenis kredensial di API ini dan keduanya tidak saling menggantikan. `CLIENT_SECRET` adalah Bearer token statis milik aplikasi dashboard, dipakai `login` dan seluruh endpoint `stats/*` dan `knowledge/*`. JWT adalah token per pengguna hasil login, dipakai `check-session` dan `logout`. Endpoint `stats/*` dan `knowledge/*` **belum** memakai JWT — scope tenant di sana masih dikirim eksplisit lewat `tenant_id`, dan `tenant_ids` dari login-lah yang dipakai UI untuk menentukan tenant mana yang boleh dipilih.
 
-JWT ditandatangani HS256 dengan `JWT_SECRET` dan berumur `JWT_TTL_DAYS` hari (default 365). Umur sepanjang itu hanya aman kalau token bisa dicabut, jadi tanda tangan yang sah saja tidak cukup: setiap pemakaian JWT dicocokkan ke baris `tokens` yang masih hidup. Logout menghapus baris itu, dan token yang sama langsung ditolak walau belum kedaluwarsa. Mengganti `JWT_SECRET` mematikan semua sesi sekaligus.
+JWT ditandatangani HS256 dengan `JWT_SECRET` dan berumur `JWT_TTL_DAYS` hari (365, konstanta di `app/core/constants.py`). Umur sepanjang itu hanya aman kalau token bisa dicabut, jadi tanda tangan yang sah saja tidak cukup: setiap pemakaian JWT dicocokkan ke baris `tokens` yang masih hidup. Logout menghapus baris itu, dan token yang sama langsung ditolak walau belum kedaluwarsa. Mengganti `JWT_SECRET` mematikan semua sesi sekaligus.
 
 Kolom `tokens.token` menyimpan JWT apa adanya, bukan hash-nya. Artinya siapa pun yang bisa membaca tabel `tokens` bisa memakai sesi orang lain sampai sesi itu di-logout atau kedaluwarsa — dan RLS di tabel tersebut masih mati. Perlakukan isi tabel itu seperti daftar password.
 
@@ -163,4 +163,3 @@ Logout memvalidasi tokennya lebih dulu, jadi token yang sudah dicabut atau palsu
 |---|---|---|
 | `CLIENT_SECRET` | — | Bearer statis untuk `login`, `stats/*`, dan `knowledge/*` |
 | `JWT_SECRET` | kosong | Kunci tanda tangan HS256. Kosong = `login` dan `check-session` balas `500` |
-| `JWT_TTL_DAYS` | `365` | Umur token sejak diterbitkan |

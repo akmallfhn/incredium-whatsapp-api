@@ -77,11 +77,9 @@ Alasannya konkurensi. Dua batch webhook untuk percakapan yang sama bisa datang h
 
 | Env | Fungsi |
 |---|---|
-| `LLM_PROVIDER` | `openai` atau `deepseek`. Kosong = `openai`. |
 | `OPENAI_API_KEY` | Jalur utama kalau provider-nya openai. |
 | `DEEPSEEK_API_KEY` | Jalur utama kalau provider-nya deepseek; sudah siap, belum dipakai. |
 | `ANTHROPIC_API_KEY` | Cadangan waktu kuota OpenAI habis. Kosong berarti tanpa fallback. |
-| `ANTHROPIC_FALLBACK_MODEL` | Opsional; menimpa `FALLBACK_MODEL` kalau mau ganti model Haiku. |
 
 Kosong dua-duanya berarti semua agent mati; webhook tetap menyimpan pesan seperti biasa.
 

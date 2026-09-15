@@ -8,7 +8,7 @@ Pertanyaan yang minta nama ("brand apa saja", "sebutkan namanya") dijawab `ListC
 
 Semua endpoint memakai `POST` dengan body JSON, diautentikasi dengan Bearer token statis dari environment `CLIENT_SECRET`, dan di-scope per tenant lewat `tenant_id` — sama seperti modul `stat`. Percakapan milik tenant lain tidak pernah bisa dibuka: `conv_id` yang tidak cocok dengan `tenant_id` dibalas `404`, bukan `403`.
 
-Endpoint chat butuh minimal satu API key LLM: key provider utama (`OPENAI_API_KEY` atau `DEEPSEEK_API_KEY`, sesuai `LLM_PROVIDER`) atau `ANTHROPIC_API_KEY` saja. Tanpa satu pun, CRUD tetap jalan dan `/chat/stream` membalas `503`.
+Endpoint chat butuh minimal satu API key LLM: key provider utama (`OPENAI_API_KEY` atau `DEEPSEEK_API_KEY`, sesuai `LLM_PROVIDER` di `app/core/constants.py`) atau `ANTHROPIC_API_KEY` saja. Tanpa satu pun, CRUD tetap jalan dan `/chat/stream` membalas `503`.
 
 ## Endpoints
 
