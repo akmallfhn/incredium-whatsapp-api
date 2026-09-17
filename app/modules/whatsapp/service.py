@@ -128,13 +128,7 @@ class WhatsAppWebhookService:
                 continue
 
             is_text = msg_type == "text"
-            attachment = msg.get(msg_type) if not is_text else None
-            if attachment is not None and msg_type in MEDIA_MESSAGE_TYPES:
-                attachment = await self._save_media_attachment(
-                    ctx=ctx,
-                    media_type=msg_type,
-                    attachment=attachment,
-                )
+            attachment = await self._resolve_attachment(ctx, msg_type, msg)
 
             wam_id = msg.get("id", "")
             try:
@@ -203,6 +197,7 @@ class WhatsAppWebhookService:
 
             is_text = msg_type == "text"
             wam_id = echo.get("id", "")
+            attachment = await self._resolve_attachment(ctx, msg_type, echo)
             try:
                 conv = await self._conversations.find_or_create(
                     tenant_id=ctx.tenant_id, full_name="", phone_number=echo.get("to", "")
@@ -214,7 +209,7 @@ class WhatsAppWebhookService:
                     sender_type=SENDER_TYPE_ADMIN,
                     msg_type=msg_type,
                     message=echo.get("text", {}).get("body", "") if is_text else "",
-                    attachment=echo.get(msg_type) if not is_text else None,
+                    attachment=attachment,
                     created_at=unix_to_datetime(echo.get("timestamp")),
                 )
                 await self._session.commit()
@@ -281,6 +276,21 @@ class WhatsAppWebhookService:
         )
 
     # --- Attachment: download dari Meta, simpan ke Supabase Storage ----------------
+    async def _resolve_attachment(
+        self, ctx: ConnectionContext, msg_type: str, payload: dict[str, Any]
+    ) -> Any | None:
+        """Attachment siap simpan: yang berupa file ditarik ke Storage, sisanya apa adanya."""
+        if msg_type == "text":
+            return None
+
+        attachment = payload.get(msg_type)
+        if attachment is None or msg_type not in MEDIA_MESSAGE_TYPES:
+            return attachment
+
+        return await self._save_media_attachment(
+            ctx=ctx, media_type=msg_type, attachment=attachment
+        )
+
     async def _save_media_attachment(
         self,
         *,
