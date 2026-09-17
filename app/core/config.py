@@ -27,9 +27,6 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     deepseek_api_key: str = ""
 
-    # Cadangan waktu kuota provider utama habis; kosong = tanpa fallback.
-    anthropic_api_key: str = ""
-
     # Supabase Storage untuk attachment WhatsApp; bucket sama dengan yang dibaca UI dashboard.
     supabase_url: str = ""
     supabase_service_role_key: str = ""
