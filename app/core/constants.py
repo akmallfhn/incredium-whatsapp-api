@@ -11,3 +11,6 @@ JWT_TTL_DAYS = 365
 
 # Provider LLM utama. Eksplisit, bukan ditebak dari key yang terisi.
 LLM_PROVIDER = "openai"
+
+# Ceiling upload Supabase Storage; PDF di atas ini diperkecil dulu, bukan ditolak.
+SUPABASE_MAX_OBJECT_BYTES = 45 * 1024 * 1024

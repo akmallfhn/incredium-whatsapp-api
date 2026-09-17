@@ -1,5 +1,6 @@
 """Event webhook Meta -> Postgres; commit per pesan biar satu gagal tak menjatuhkan sisanya."""
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -7,6 +8,7 @@ from typing import Any
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import constants
 from app.modules.meta.repository import ConnectionContext, MetaConnectionRepository
 from app.modules.whatsapp.entity import (
     CHAT_STATUS_DELIVERED,
@@ -21,6 +23,7 @@ from app.modules.whatsapp.entity import (
 from app.modules.whatsapp.meta_client import MetaMediaClient
 from app.modules.whatsapp.repository import WaChatRepository, WaConversationRepository
 from app.modules.whatsapp.schema import WAWebhookBody
+from app.shared.pdf import shrink_pdf
 from app.shared.storage import SupabaseStorage
 
 logger = logging.getLogger(__name__)
@@ -28,6 +31,7 @@ logger = logging.getLogger(__name__)
 SUPPORTED_MESSAGE_TYPES = {"audio", "contacts", "document", "image", "sticker", "text", "video"}
 # Tipe pesan yang attachment-nya beneran file (didownload dari Meta & diupload ke Storage).
 MEDIA_MESSAGE_TYPES = {"audio", "document", "image", "sticker", "video"}
+PDF_MIME = "application/pdf"
 
 HANDLED_FIELDS = ("messages", "smb_message_echoes")
 
@@ -309,6 +313,8 @@ class WhatsAppWebhookService:
                 phone_number_id=ctx.phone_number_id,
                 media_id=media_id,
             )
+            if mime_type == PDF_MIME:
+                content = await self._shrink_pdf(content, media_id)
             object_path = self._storage.object_path(
                 ctx.tenant_slug, media_type, media_id, mime_type
             )
@@ -321,3 +327,12 @@ class WhatsAppWebhookService:
         except Exception:
             logger.exception(f"wa-meta webhook: failed to save media {media_id}")
             return attachment
+
+    async def _shrink_pdf(self, content: bytes, media_id: str) -> bytes:
+        """Di thread terpisah: pikepdf/Pillow CPU-bound dan akan menahan event loop webhook."""
+        shrunk = await asyncio.to_thread(shrink_pdf, content, constants.SUPABASE_MAX_OBJECT_BYTES)
+        if len(shrunk) < len(content):
+            logger.info(
+                f"wa-meta webhook: pdf {media_id} diperkecil {len(content)} -> {len(shrunk)} bytes"
+            )
+        return shrunk
