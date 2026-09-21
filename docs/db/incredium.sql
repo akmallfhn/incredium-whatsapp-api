@@ -179,7 +179,7 @@ CREATE TABLE wa_conversations (
 CREATE TABLE wa_chats (
   id            CHAR(21)              PRIMARY KEY  DEFAULT nanoid(),
   conv_id       CHAR(21)              NOT NULL,
-  wam_id        VARCHAR               NOT NULL,
+  wam_id        VARCHAR               NOT NULL     UNIQUE,
   direction     wac_direction_enum    NOT NULL,
   sender_type   wac_sender_type_enum  NOT NULL,
   reply_to_id   CHAR(21)                  NULL,

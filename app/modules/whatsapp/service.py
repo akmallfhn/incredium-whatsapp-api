@@ -177,7 +177,7 @@ class WhatsAppWebhookService:
             replied_to = await self._chats.find_by_wam_id(context_wam_id, conv_id=conv.id)
             reply_to_id = replied_to.id if replied_to else None
 
-        await self._chats.create(
+        await self._chats.upsert_message(
             conv_id=conv.id,
             wam_id=wam_id,
             direction=DIRECTION_INBOUND,
@@ -206,7 +206,7 @@ class WhatsAppWebhookService:
                 conv = await self._conversations.find_or_create(
                     tenant_id=ctx.tenant_id, full_name="", phone_number=echo.get("to", "")
                 )
-                await self._chats.create(
+                await self._chats.upsert_message(
                     conv_id=conv.id,
                     wam_id=wam_id,
                     direction=DIRECTION_OUTBOUND,
@@ -267,16 +267,13 @@ class WhatsAppWebhookService:
         conv = await self._conversations.find_or_create(
             tenant_id=tenant_id, full_name="", phone_number=phone_number
         )
-        await self._chats.create(
+        # Upsert, bukan insert: echo pesan ini bisa menyusul dan harus mengisi baris yang sama.
+        await self._chats.upsert_status(
             conv_id=conv.id,
             wam_id=wam_id,
-            direction=DIRECTION_OUTBOUND,
-            sender_type=SENDER_TYPE_ADMIN,
-            msg_type="text",
-            message="",
             status=mapped,
-            created_at=updated_at,
-            **{timestamp_field: updated_at},
+            timestamp_field=timestamp_field,
+            occurred_at=updated_at,
         )
 
     # --- Attachment: download dari Meta, simpan ke Supabase Storage ----------------
