@@ -73,15 +73,6 @@ CREATE TYPE wac_status_enum AS ENUM (
   'failed'
 );
 
--- Enumeration for the wa_alerts table (wa_alert_*)
-
-CREATE TYPE wa_alert_status_enum AS ENUM (
-  'scheduled',
-  'sent',
-  'delivered',
-  'bounced'
-);
-
 -- Enumeration for the wa_webhook_events table (wwe_*)
 
 CREATE TYPE wwe_status_enum AS ENUM (
@@ -204,16 +195,6 @@ CREATE TABLE wa_chats (
   updated_at    TIMESTAMPTZ           NOT NULL     DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE wa_alerts (
-  id                SERIAL                PRIMARY KEY,
-  conv_id           CHAR(21)              NOT NULL,
-  email_message_id  TEXT                      NULL  UNIQUE,
-  scheduled_at      TIMESTAMPTZ           NOT NULL,
-  status            wa_alert_status_enum  NOT NULL  DEFAULT 'scheduled',
-  created_at        TIMESTAMPTZ           NOT NULL  DEFAULT CURRENT_TIMESTAMP,
-  updated_at        TIMESTAMPTZ           NOT NULL  DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE TABLE wa_webhook_events (
   id            CHAR(21)         PRIMARY KEY  DEFAULT nanoid(),
   app_id        VARCHAR          NOT NULL,
@@ -256,9 +237,6 @@ ALTER TABLE wa_chats
   ADD FOREIGN KEY (conv_id)     REFERENCES wa_conversations (id),
   ADD FOREIGN KEY (reply_to_id) REFERENCES wa_chats (id);
 
-ALTER TABLE wa_alerts
-  ADD FOREIGN KEY (conv_id) REFERENCES wa_conversations (id);
-
 -------------
 -- Indexes --
 -------------
@@ -278,7 +256,6 @@ CREATE INDEX meta_connections_meta_app_id_idx  ON meta_connections (meta_app_id)
 
 CREATE INDEX wa_conversations_tenant_id_idx  ON wa_conversations (tenant_id);
 CREATE INDEX wa_chats_conv_id_idx            ON wa_chats (conv_id);
-CREATE INDEX wa_alerts_conv_id_idx           ON wa_alerts (conv_id);
 
 -- Webhook Meta
 
