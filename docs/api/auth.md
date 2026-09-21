@@ -2,7 +2,7 @@
 
 Login email + password untuk dashboard TRC, penerbitan JWT, pemeriksaan sesi, dan logout. Endpoint ini yang menentukan siapa penggunanya dan tenant mana saja yang boleh ia lihat — tapi belum ada endpoint untuk membuat atau mengubah user: baris `users`, `password_hash`, dan `users_access` masih diisi manual lewat SQL.
 
-Ada dua jenis kredensial di API ini dan keduanya tidak saling menggantikan. `CLIENT_SECRET` adalah Bearer token statis milik aplikasi dashboard, dipakai `login` dan seluruh endpoint `stats/*` dan `knowledge/*`. JWT adalah token per pengguna hasil login, dipakai `check-session` dan `logout`. Endpoint `stats/*` dan `knowledge/*` **belum** memakai JWT — scope tenant di sana masih dikirim eksplisit lewat `tenant_id`, dan `tenant_ids` dari login-lah yang dipakai UI untuk menentukan tenant mana yang boleh dipilih.
+Ada dua jenis kredensial di API ini dan keduanya tidak saling menggantikan. `CLIENT_SECRET` adalah Bearer token statis milik aplikasi dashboard, dipakai `login` dan seluruh endpoint `stats/*`. JWT adalah token per pengguna hasil login, dipakai `check-session` dan `logout`. Endpoint `stats/*` **belum** memakai JWT — scope tenant di sana masih dikirim eksplisit lewat `tenant_id`, dan `tenant_ids` dari login-lah yang dipakai UI untuk menentukan tenant mana yang boleh dipilih.
 
 JWT ditandatangani HS256 dengan `JWT_SECRET` dan berumur `JWT_TTL_DAYS` hari (365, konstanta di `app/core/constants.py`). Umur sepanjang itu hanya aman kalau token bisa dicabut, jadi tanda tangan yang sah saja tidak cukup: setiap pemakaian JWT dicocokkan ke baris `tokens` yang masih hidup. Logout menghapus baris itu, dan token yang sama langsung ditolak walau belum kedaluwarsa. Mengganti `JWT_SECRET` mematikan semua sesi sekaligus.
 
@@ -161,5 +161,5 @@ Logout memvalidasi tokennya lebih dulu, jadi token yang sudah dicabut atau palsu
 
 | Variable | Default | Keterangan |
 |---|---|---|
-| `CLIENT_SECRET` | — | Bearer statis untuk `login`, `stats/*`, dan `knowledge/*` |
+| `CLIENT_SECRET` | — | Bearer statis untuk `login` dan `stats/*` |
 | `JWT_SECRET` | kosong | Kunci tanda tangan HS256. Kosong = `login` dan `check-session` balas `500` |

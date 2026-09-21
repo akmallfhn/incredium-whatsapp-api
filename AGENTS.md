@@ -4,7 +4,7 @@ Instructions for coding agents (Claude Code, Codex, or others) working in this r
 
 ## What this is
 
-Incredium WhatsApp API is the single Python backend for Incredium, a multitenant WhatsApp brand-deal platform. It does four things: (1) receives Meta WhatsApp Cloud API webhooks — inbound customer messages, echoes of outbound messages sent from the WhatsApp Business App (coexistence), and delivery status updates — and persists them per tenant, uploading media attachments to Supabase Storage; (2) serves read-only aggregate endpoints under `/api/v1/stats` for the 360° brand-deal evaluation dashboard; (3) runs LangGraph agents that read those conversations and write structured fields back; and (4) answers internal questions about those conversations over a streaming chat endpoint, retrieving from the same aggregates the dashboard uses. Tenant routing is by `meta_connections.wa_phone_number_id`: the WhatsApp number an event arrives on decides which connection — and therefore which tenant — owns it.
+Incredium WhatsApp API is the single Python backend for Incredium, a multitenant WhatsApp brand-deal platform. It does three things: (1) receives Meta WhatsApp Cloud API webhooks — inbound customer messages, echoes of outbound messages sent from the WhatsApp Business App (coexistence), and delivery status updates — and persists them per tenant, uploading media attachments to Supabase Storage; (2) serves read-only aggregate endpoints under `/api/v1/stats` for the 360° brand-deal evaluation dashboard; and (3) runs LangGraph agents that read those conversations and write structured fields back. Tenant routing is by `meta_connections.wa_phone_number_id`: the WhatsApp number an event arrives on decides which connection — and therefore which tenant — owns it.
 
 Postgres via Supabase. Deployed on Railway.
 
@@ -30,7 +30,6 @@ Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-se
 | `tenant` | Tenant lookup by id |
 | `meta` | Meta App credentials (`meta_apps`) and per-tenant WABA connections (`meta_connections`); resolves a webhook's `phone_number_id` to its tenant and access token |
 | `agents` | LangGraph automation agents — see `docs/agents/README.md` |
-| `knowledge` | Internal Q&A chatbot: thread CRUD plus an SSE endpoint backed by a retrieval agent and a job queue — see `docs/api/knowledge.md` |
 | `health` | Liveness and database reachability |
 | `shared` | Response envelope, `ApiError`, Bearer auth, pagination, shared httpx client, Meta signature verification, bcrypt/JWT primitives, Supabase Storage client |
 | `core`, `db` | Settings and the lazy async engine/session factory |
@@ -48,8 +47,6 @@ Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-se
 - **Enums are created by the DDL in `docs/db/`, not by SQLAlchemy.** Every `ENUM(...)` in an entity is declared `create_type=False`. `updated_at` is maintained by the ORM layer, not by database triggers — this database has no triggers.
 - **Comments:** one line, no multi-line comment blocks. If it needs more than one line, it needs a shorter explanation instead. Comments and docs are Indonesian; identifiers, enum values, column names, and API fields are English.
 - **Formatting:** `ruff` with line length 100, double quotes, and `E`/`F`/`I` lint rules. Run `uv run ruff format .` before committing.
-- **Streaming responses are the one other envelope exception.** `knowledge/chat/stream` answers `text/event-stream`, but everything that can be rejected before the stream opens (auth, validation, unknown conversation, full queue) is still refused with the normal envelope — never as an error event mid-stream. Every SSE `data:` line carries one JSON-encoded string, no exceptions, so the client parser stays a single branch.
-- **The knowledge agent never answers from the model's own memory.** Retrieval goes through `ToolBox`, which wraps `StatService` rather than writing its own SQL — if the chat and the dashboard ever disagree on a number, that is a bug. Adding a metric means adding it to `stat` first, then exposing it as a tool.
 - **Module API docs:** every module with client-facing endpoints has a `docs/api/<module>.md` — one intro paragraph, then per endpoint: one-sentence description, `**Method:**`/`**Authorization:**` lines, request and response as JSON code blocks (request also gets a Field/Type/Required table; response doesn't), and an errors table. No base_url explanation, no curl examples.
 
 ## Database
@@ -57,7 +54,7 @@ Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-se
 **The schema is never generated from this code.** SQLAlchemy emits no DDL, so a schema change has to land in **two** places or things drift:
 
 1. The live Supabase project, via the `apply_migration` MCP tool.
-2. `docs/db/incredium.sql` — a hand-maintained reference DDL in the same format as `ordina-ddl.sql`. It is documentation, not a migration runner. A change that has to run standalone gets its own file beside it, like `docs/db/knowledge.sql`.
+2. `docs/db/incredium.sql` — a hand-maintained reference DDL in the same format as `ordina-ddl.sql`. It is documentation, not a migration runner. A change that has to run standalone gets its own file beside it.
 
 The SQLAlchemy entities are a read-write mirror of that DDL, which is why their enums use `create_type=False`. Note that `id` defaults depend on a `nanoid()` function existing in the database.
 

@@ -50,7 +50,6 @@ app/
     tenant/                     # entity + repository `tenants`
     whatsapp/                   # entity, repository, service, routes, meta_client
     stat/                       # endpoint agregat read-only untuk dashboard
-    knowledge/                  # chatbot internal: CRUD thread + SSE + antrean job
 ```
 
 Menambah module baru: bikin folder di `app/modules/`, lalu daftarkan di `create_app()`.
@@ -67,93 +66,8 @@ Menambah module baru: bikin folder di `app/modules/`, lalu daftarkan di `create_
 | `GET` | `/api/v1/webhook/whatsapp/callback/{app_id}` | Meta (verifikasi webhook) | `hub.verify_token` |
 | `POST` | `/api/v1/webhook/whatsapp/callback/{app_id}` | Meta (event pesan/status) | `X-Hub-Signature-256` |
 | `POST` | `/api/v1/stats/*` | dashboard TRC | `Bearer CLIENT_SECRET` |
-| `POST` | `/api/v1/knowledge/conversations*` | dashboard TRC (halaman Knowledge) | `Bearer CLIENT_SECRET` |
-| `POST` | `/api/v1/knowledge/chat/stream` | dashboard TRC (halaman Knowledge) | `Bearer CLIENT_SECRET` |
-
-## Knowledge (chatbot internal)
-
-Tanya-jawab tentang kondisi brand deal di atas data yang sama dengan dashboard.
-Detail endpoint-nya di [docs/api/knowledge.md](docs/api/knowledge.md).
-
-```
-Dashboard TRC
-     │  POST /api/v1/knowledge/chat/stream
-     ▼
-[routes]     simpan pertanyaan, titipkan job ke antrean, buka SSE
-     ▼
-[queue]      worker terbatas — panggilan LLM punya rate limit, antrean penuh ditolak 429
-     ▼
-[graph]      plan ──▶ retrieve ──┐   (maksimal 3 ronde)
-             ▲                   │
-             └───────────────────┘
-                       ▼
-                    answer  ──▶ token di-stream ke SSE, teks utuh disimpan ke kb_chats
-```
-
-**Retrieval-nya bukan vector search.** Pertanyaan internal hampir selalu berbentuk
-agregat ("median first response bulan ini berapa"), dan potongan teks hasil similarity
-tidak bisa dipakai menghitung median — angkanya harus datang dari Postgres. Jadi jalur
-utamanya tool yang membungkus `StatService`, yaitu endpoint `stats/*` yang sama persis
-dengan yang dibaca dashboard, ditambah pencarian leksikal ke `wa_conversations`/`wa_chats`
-untuk pertanyaan kualitatif yang menyebut nama brand atau kata di dalam pesan. Konsekuensi
-yang disengaja: angka di chat dan angka di dashboard tidak akan pernah berbeda.
-
-Planner dan penjawab dipisah. Planner (tier `fast`) terikat ke tool dan boleh berputar;
-penjawab (tier `full`) tidak terikat tool sama sekali dan hanya membaca hasil retrieval,
-supaya token jawaban tidak pernah terpakai memanggil tool dan jawabannya bisa di-stream
-utuh dari token pertama.
-
-Provider utamanya `openai`, dan bisa dipindah lewat `LLM_PROVIDER` di `app/core/constants.py`. DeepSeek sudah
-tersambung penuh — paket, konfigurasi, dan peta model-nya siap — tapi belum dipakai;
-menyalakannya harus disengaja, tidak pernah terjadi sendiri karena key lain kebetulan terisi.
-Call site menyebut tier (`fast` / `full`), bukan nama model vendor, jadi pindah provider cuma
-mengganti satu baris environment — peta tier ke nama model ada di `PROVIDER_MODELS`.
-
-Kalau provider utamanya habis kuota, kehabisan saldo, atau sedang down, panggilannya otomatis
-dialihkan ke Anthropic Haiku, baik di sini maupun di agent evaluasi lead. Yang dialihkan hanya
-kegagalan yang tidak akan berubah kalau diulang ke provider yang sama; error prompt atau schema
-tetap naik apa adanya. Isi `ANTHROPIC_API_KEY` untuk menyalakannya, kosongkan untuk mematikannya.
-
-DeepSeek memakai `402` untuk saldo habis, dan openai SDK tidak punya kelas untuk status itu,
-jadi 402 diterjemahkan dulu sebelum masuk daftar fallback. Tanpa itu saldo habis akan
-mematikan agent alih-alih pindah ke cadangan.
-
-Pertanyaan yang minta nama dijawab `ListConversations` — daftar percakapan beserta brand,
-kontak, stage, dan nilainya, bisa disaring rentang tanggal, stage, dan nilai minimum. Tool
-agregat seperti `GetLeadStatus` hanya menghitung per stage dan tidak akan pernah bisa
-menyebut nama, jadi dua-duanya perlu ada.
-
-Yang tidak tertangani tool mana pun jatuh ke `RunSqlQuery`: agent menulis `SELECT`-nya
-sendiri. Itu jalan terakhir, dan dipagari berlapis — satu pernyataan, hanya `wa_conversations`
-dan `wa_chats`, dijalankan di transaksi `READ ONLY` dengan `statement_timeout`, jadi tulisan
-yang lolos saringan teks tetap ditolak Postgres sendiri.
-
-Scope tenant tidak dititipkan ke model. Kedua tabel itu disuntik sebagai CTE bernama sama yang
-sudah tersaring tenant dan sudah membuang kontak internal; nama CTE menang atas tabel dasar,
-jadi `FROM wa_conversations` mustahil melihat tenant lain. Nama tabel berskema (`public.x`)
-dan CTE yang menyamar sebagai nama tabel ditolak supaya jalan memutarnya tertutup. Menyuruh
-LLM mengingat filter tenant sempat dicoba dan gagal tidak deterministik — kadang ia lupa, lalu
-berhenti sambil meminta izin ke user.
-
-Empat metrik sengaja ditolak, bukan diestimasi: leakage (Rp), lost reason, cycle time
-inbound → closed, dan konversi antar stage sebagai deret waktu. Semuanya belum punya
-sumber data di schema percakapan, dan menebaknya lebih berbahaya daripada bilang tidak
-tahu.
-
-### Batasan antrean
-
-Antrean hidup di memori satu proses. Job yang sedang jalan hilang kalau server restart —
-barisnya ditandai `failed` saat startup berikutnya, jadi tidak ada jawaban yang menggantung
-selamanya di UI — dan tidak menyebar ke replika kedua. Untuk itu perlu broker di luar
-proses (Redis atau sejenisnya). Untuk satu instance Railway dengan lalu lintas internal,
-ini cukup.
-
 
 ## Setup
-
-> Modul Knowledge butuh dua tabel baru (`kb_conversations`, `kb_chats`).
-> Jalankan [docs/db/knowledge.sql](docs/db/knowledge.sql) sekali di Supabase sebelum
-> memakai endpoint `/api/v1/knowledge/*`; endpoint lain tidak terpengaruh.
 
 ```bash
 # 1. Install deps (pakai uv)
@@ -163,10 +77,9 @@ uv sync
 cp .env.example .env
 # wajib: DATABASE_URL (kredensial Meta ada di tabel meta_apps, bukan env)
 # untuk attachment: SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
-# untuk stats + knowledge + login: CLIENT_SECRET
+# untuk stats + login: CLIENT_SECRET
 # untuk login dashboard: JWT_SECRET
-# untuk knowledge: OPENAI_API_KEY atau DEEPSEEK_API_KEY (sesuai LLM_PROVIDER di constants.py)
-# opsional: ANTHROPIC_API_KEY, dipakai otomatis kalau provider utama habis
+# untuk agent evaluasi lead: OPENAI_API_KEY atau DEEPSEEK_API_KEY (sesuai LLM_PROVIDER di constants.py)
 
 # 3. Jalankan server
 uv run dev          # http://localhost:$APP_PORT  (reload)
@@ -251,7 +164,5 @@ Detail endpoint-nya di [docs/api/auth.md](docs/api/auth.md).
 - **`app_secret` dan `access_token` disimpan plaintext** di `meta_apps`/`meta_connections`.
 - **Belum ada endpoint bikin/ubah user.** Baris `users`, `password_hash`, dan
   `users_access` untuk sekarang diisi manual lewat SQL.
-- **Antrean chat Knowledge ada di memori satu proses**, jadi tidak selamat dari restart
-  dan tidak menyebar ke replika kedua. Lihat bagian Knowledge di atas.
 - Belum ada test suite otomatis. Verifikasi perubahan dengan `uv run ruff check app` plus
   request manual ke server yang jalan.
