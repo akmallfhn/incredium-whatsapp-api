@@ -79,6 +79,7 @@ CREATE TYPE wwe_status_enum AS ENUM (
   'pending',
   'processing',
   'done',
+  'ignored',
   'failed'
 );
 

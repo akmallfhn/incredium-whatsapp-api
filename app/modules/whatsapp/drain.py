@@ -105,20 +105,40 @@ class WebhookEventDrainer:
 
         try:
             async with session_scope() as session:
-                await self._build_service(session).process(payload)
+                outcome = await self._build_service(session).process(payload)
         except Exception as e:
             logger.exception(f"webhook drain: gagal memproses {event.id}")
             await self._finish(event.id, error=f"{type(e).__name__}: {e}")
             return
 
+        # handled 0 berarti benar-benar tidak ada yang dikerjakan, apa pun sebabnya.
+        if outcome.handled == 0:
+            sebab = (
+                f"field {', '.join(outcome.skipped)}"
+                if outcome.skipped
+                else "tidak ada koneksi aktif atau metadata"
+            )
+            logger.warning(f"webhook drain: {event.id} tidak menangani apa pun ({sebab})")
+            await self._finish(event.id, error=None, ignored=True)
+            return
+
         await self._finish(event.id, error=None)
 
-    async def _finish(self, event_id: str, *, error: str | None, permanent: bool = False) -> None:
+    async def _finish(
+        self,
+        event_id: str,
+        *,
+        error: str | None,
+        permanent: bool = False,
+        ignored: bool = False,
+    ) -> None:
         """Bookkeeping di session sendiri supaya rollback pemrosesan tidak ikut membatalkannya."""
         try:
             async with session_scope() as session:
                 events = self._build_events(session)
-                if error is None:
+                if ignored:
+                    await events.mark_ignored(event_id)
+                elif error is None:
                     await events.mark_done(event_id)
                 elif permanent:
                     await events.mark_failed(event_id=event_id, error=error)

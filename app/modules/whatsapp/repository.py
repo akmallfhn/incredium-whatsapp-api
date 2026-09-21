@@ -9,6 +9,7 @@ from app.modules.whatsapp.entity import (
     DIRECTION_OUTBOUND,
     EVENT_STATUS_DONE,
     EVENT_STATUS_FAILED,
+    EVENT_STATUS_IGNORED,
     EVENT_STATUS_PENDING,
     EVENT_STATUS_PROCESSING,
     SENDER_TYPE_ADMIN,
@@ -211,6 +212,15 @@ class WaWebhookEventRepository:
                 processed_at=func.current_timestamp(),
                 error=None,
             )
+            .execution_options(synchronize_session=False)
+        )
+
+    async def mark_ignored(self, event_id: str) -> None:
+        """Tersimpan tapi tidak ada yang dikerjakan; dibedakan dari done supaya bisa ditinjau."""
+        await self._session.execute(
+            update(WaWebhookEvent)
+            .where(WaWebhookEvent.id == event_id)
+            .values(status=EVENT_STATUS_IGNORED, processed_at=func.current_timestamp())
             .execution_options(synchronize_session=False)
         )
 

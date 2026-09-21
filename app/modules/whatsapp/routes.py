@@ -27,13 +27,10 @@ class AppCredentials:
 
 
 async def resolve_app_credentials(app_id: str) -> AppCredentials | None:
-    """Kredensial App pemanggil; sumbernya cuma meta_apps, App tak dikenal dapat None."""
-    try:
-        async with session_scope() as session:
-            app = await MetaAppRepository(session).find_by_app_id(app_id)
-    except Exception:
-        logger.exception("wa-meta webhook: meta_apps lookup failed")
-        return None
+    """Kredensial App pemanggil; None berarti App tak dikenal, bukan gagal memeriksa."""
+    # Error database dibiarkan naik jadi 500; 403 berarti "ditolak", bukan "belum diperiksa".
+    async with session_scope() as session:
+        app = await MetaAppRepository(session).find_by_app_id(app_id)
 
     if app is None:
         return None
@@ -62,6 +59,8 @@ def register_whatsapp_routes(
             and verify_meta_token(hub_verify_token, creds.verify_token)
         ):
             return PlainTextResponse(hub_challenge)
+
+        logger.warning(f"wa-meta webhook: verifikasi ditolak untuk app_id={app_id}")
         raise HTTPException(status_code=403, detail="Forbidden")
 
     @router.post("/callback/{app_id}")
@@ -72,12 +71,16 @@ def register_whatsapp_routes(
 
         creds = await resolve_app_credentials(app_id)
         if creds is None:
+            # Sistemik kalau terpicu: baris meta_apps hilang atau inactive, semua event ikut gagal.
+            logger.warning(f"wa-meta webhook: app_id={app_id} tidak ada di meta_apps aktif")
             raise HTTPException(status_code=403, detail="Forbidden")
 
         # Signature dicek sebelum body diparse: isi payload belum boleh dipercaya sampai sini.
         if creds.app_secret:
             signature = request.headers.get("x-hub-signature-256", "")
             if not verify_meta_signature(raw_body, signature, creds.app_secret):
+                # Biasanya app_secret dirotasi di Meta tapi belum diperbarui di meta_apps.
+                logger.warning(f"wa-meta webhook: signature tidak cocok untuk app_id={app_id}")
                 raise HTTPException(status_code=401, detail="Invalid signature")
 
         try:
