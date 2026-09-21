@@ -4,13 +4,13 @@ Instructions for coding agents (Claude Code, Codex, or others) working in this r
 
 ## What this is
 
-Incredium WhatsApp API is the single Python backend for Incredium, a multitenant WhatsApp brand-deal platform. It does three things: (1) receives Meta WhatsApp Cloud API webhooks — inbound customer messages, echoes of outbound messages sent from the WhatsApp Business App (coexistence), and delivery status updates — and persists them per tenant, uploading media attachments to Supabase Storage; (2) serves read-only aggregate endpoints under `/api/v1/stats` for the 360° brand-deal evaluation dashboard; and (3) runs LangGraph agents that read those conversations and write structured fields back. Tenant routing is by `meta_connections.wa_phone_number_id`: the WhatsApp number an event arrives on decides which connection — and therefore which tenant — owns it.
+Incredium WhatsApp API is the single Python backend for Incredium, a multitenant WhatsApp brand-deal platform. It does two things: (1) receives Meta WhatsApp Cloud API webhooks — inbound customer messages, echoes of outbound messages sent from the WhatsApp Business App (coexistence), and delivery status updates — records each event raw in `wa_webhook_events` before answering Meta, then persists it per tenant and uploads media attachments to Supabase Storage; and (2) serves read-only aggregate endpoints under `/api/v1/stats` for the 360° brand-deal evaluation dashboard. Tenant routing is by `meta_connections.wa_phone_number_id`: the WhatsApp number an event arrives on decides which connection — and therefore which tenant — owns it.
 
 Postgres via Supabase. Deployed on Railway.
 
 ## Stack
 
-Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-settings, httpx. LangGraph + LangChain for agents: `langchain-openai` or `langchain-deepseek` as the primary provider (`LLM_PROVIDER` in `app/core/constants.py`), `langchain-anthropic` always as the fallback. `uv` for dependencies, `ruff` for lint and format.
+Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-settings, httpx. LangGraph + LangChain are still declared for agents (`LLM_PROVIDER` in `app/core/constants.py` picks `langchain-openai` or `langchain-deepseek`), but no agent currently ships. `uv` for dependencies, `ruff` for lint and format.
 
 ## Running locally
 
@@ -25,11 +25,10 @@ Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-se
 | Module | Owns |
 |---|---|
 | `auth` | Email/password login issuing a 1-year HS256 JWT, session check, logout that deletes the session row in `tokens`, user roles and per-tenant access — see `docs/api/auth.md` |
-| `whatsapp` | Meta webhook at `/callback/{app_id}`: signature check against that App's secret, inbound messages, outbound echoes, delivery statuses, media upload to Supabase Storage |
+| `whatsapp` | Meta webhook at `/callback/{app_id}`: signature check against that App's secret, durable event intake in `wa_webhook_events`, then inbound messages, outbound echoes, delivery statuses, media upload to Supabase Storage |
 | `stat` | Read-only aggregate endpoints for the dashboard — volume, response time, heatmap, lead funnel, unanswered, brand deals |
 | `tenant` | Tenant lookup by id |
 | `meta` | Meta App credentials (`meta_apps`) and per-tenant WABA connections (`meta_connections`); resolves a webhook's `phone_number_id` to its tenant and access token |
-| `agents` | LangGraph automation agents — see `docs/agents/README.md` |
 | `health` | Liveness and database reachability |
 | `shared` | Response envelope, `ApiError`, Bearer auth, pagination, shared httpx client, Meta signature verification, bcrypt/JWT primitives, Supabase Storage client |
 | `core`, `db` | Settings and the lazy async engine/session factory |
@@ -43,7 +42,9 @@ Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-se
 - **Every list endpoint paginates through `app.shared.pagination`** (`normalize`, `offset`, `meta`) — never reimplement the clamping math. Response body is `{"list": [...], "metapaging": {"total_data", "total_page", "current_page", "page_size"}}`. Default page `1`, size `20`, capped at `100`.
 - **Stat queries are raw SQL via `text()`, read-only, and always scoped by `tenant_id`.** Aggregation belongs in Postgres, not in Python — the repository returns rows, the service only assembles derived numbers and formats dates.
 - **Date ranges are inclusive and timezone-aware.** `end_date` maps to the start of the following day in the requested IANA zone. Endpoints returning a per-day or per-stage series must zero-fill empty buckets so charts don't break.
-- **The webhook must answer Meta fast.** Verify the signature, then hand the payload to a background task; Meta retries anything slow. Persistence commits per message so one bad message can't drop the rest of the batch.
+- **The webhook records before it answers.** Verify the signature, write the raw payload to `wa_webhook_events`, commit, *then* return `200` — Meta's at-least-once guarantee is spent the moment you answer, so nothing may be held only in memory past that point. Processing runs after the response and reads from the row, never from the request. Persistence commits per message so one bad message can't drop the rest of the batch.
+- **Processing must be safe to repeat.** A killed process leaves its row `processing`; the sweeper reclaims it once `claimed_at` goes stale and runs it again, and Meta can redeliver the same payload as a second row. Both are harmless only because `wa_chats.wam_id` is `UNIQUE` and both write paths upsert. Never add a write to the webhook path that would double up when replayed.
+- **Answer Meta `200` for anything you cannot act on.** An unparseable body or an unknown `object` is logged and accepted; prolonged non-2xx gets the subscription disabled on Meta's side, which is a far worse failure than one dropped junk payload. Signature and unknown-App rejections stay as `401`/`403`.
 - **Enums are created by the DDL in `docs/db/`, not by SQLAlchemy.** Every `ENUM(...)` in an entity is declared `create_type=False`. `updated_at` is maintained by the ORM layer, not by database triggers — this database has no triggers.
 - **Comments:** one line, no multi-line comment blocks. If it needs more than one line, it needs a shorter explanation instead. Comments and docs are Indonesian; identifiers, enum values, column names, and API fields are English.
 - **Formatting:** `ruff` with line length 100, double quotes, and `E`/`F`/`I` lint rules. Run `uv run ruff format .` before committing.
@@ -62,7 +63,7 @@ Two Postgres details that have already cost time: enums cannot drop labels, so c
 
 ## Agents
 
-LangGraph automation agents live in `app/modules/agents/<agent_name>/`, sharing `app/modules/agents/llm.py`. Their rules — one env var, measured token ceilings, write guards expressed in SQL rather than Python, and failing without taking down the flow that triggered them — are in `docs/agents/README.md`. Read that before adding one.
+No agent currently ships. `app/modules/agents/llm.py` stays as the shared provider factory and `docs/agents/README.md` as the rules — one env var, measured token ceilings, write guards expressed in SQL rather than Python, and failing without taking down the flow that triggered them. Read that before adding one, and put it in `app/modules/agents/<agent_name>/`. Nothing may hang an agent off the webhook path: its LLM latency belongs in its own sweeper, not in the request that answers Meta.
 
 ## Known gaps
 

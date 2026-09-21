@@ -6,7 +6,7 @@ mencatatnya ke **Postgres multitenant** di Supabase.
 Dibangun dengan **FastAPI + SQLAlchemy (async) + asyncpg**.
 
 DDL referensinya ada di `docs/db/incredium.sql`; SQLAlchemy tidak pernah menggenerate schema.
-Tabel yang dipakai: `tenants`, `wa_conversations`, `wa_chats`.
+Tabel yang dipakai: `tenants`, `wa_webhook_events`, `wa_conversations`, `wa_chats`.
 
 ## Alur
 
@@ -14,18 +14,33 @@ Tabel yang dipakai: `tenants`, `wa_conversations`, `wa_chats`.
 Meta WhatsApp Cloud API
      │  POST /api/v1/webhook/whatsapp/callback/<app_id>   (signature X-Hub-Signature-256)
      ▼
-[routes]   balas 200 secepatnya, proses di background task
+[routes]   verifikasi signature ─▶ INSERT payload mentah ─▶ commit ─▶ balas 200
+     │                                       │
+     │                              wa_webhook_events (pending)
+     ▼                                       │
+[drain]    proses dari baris itu, bukan dari request  ◀── sweeper tiap 60s ambil yang tertinggal
      ▼
 [service]  tenant di-resolve dari metadata.phone_number_id  ─▶  multitenant
      ├── messages            ─▶ wa_conversations (upsert) + wa_chats (inbound/user)
      │     └── media         ─▶ download dari Graph API ─▶ upload Supabase Storage ─▶ storage_url
      ├── smb_message_echoes  ─▶ wa_chats (outbound/admin)   pesan staff dari WA Business App
      └── statuses            ─▶ update sent/delivered/read/failed + timestamp-nya
+                                       │
+                              wa_webhook_events (done)
 ```
 
-Meta menjanjikan *at-least-once delivery* dan mengulang kirim kalau webhook tidak balas 200
-dengan cepat, jadi seluruh persistensi jalan di background task. Tiap pesan di-commit
-sendiri-sendiri: satu pesan gagal tidak menjatuhkan pesan lain di batch yang sama.
+**Kenapa dicatat dulu sebelum balas 200.** Jaminan *at-least-once* Meta habis terpakai begitu
+kita membalas 200 — sesudah itu Meta tidak akan mengirim ulang, jadi apa pun yang cuma ada di
+memori hilang kalau prosesnya mati. Railway mengirim SIGTERM lalu SIGKILL saat deploy, dan
+payload bermedia bisa puluhan detik (download Graph API + upload Storage), jadi jendela itu nyata.
+Dengan payload sudah commit lebih dulu, deploy paling buruk hanya menunda: barisnya tertinggal
+`processing`, dan sweeper di instance berikutnya mengambilnya setelah `claimed_at` dianggap macet.
+
+Mengulang pemrosesan aman karena `wa_chats.wam_id` `UNIQUE` dan kedua jalur tulis memakai upsert —
+payload yang sama diproses dua kali menghasilkan baris yang sama, bukan duplikat. Tiap pesan
+di-commit sendiri-sendiri: satu pesan gagal tidak menjatuhkan pesan lain di batch yang sama.
+Event yang gagal diulang sampai `WEBHOOK_EVENT_MAX_ATTEMPTS`, lalu ditandai `failed` beserta
+error-nya. Yang sudah `done` dibuang sweeper setelah `WEBHOOK_EVENT_RETENTION_DAYS` hari.
 
 ## Struktur Proyek
 
@@ -48,8 +63,9 @@ app/
   modules/
     health/routes.py            # /health, /health/db
     tenant/                     # entity + repository `tenants`
-    whatsapp/                   # entity, repository, service, routes, meta_client
+    whatsapp/                   # entity, repository, service, routes, meta_client, drain
     stat/                       # endpoint agregat read-only untuk dashboard
+    agents/llm.py               # factory LLM bersama; belum ada agent yang memakainya
 ```
 
 Menambah module baru: bikin folder di `app/modules/`, lalu daftarkan di `create_app()`.
@@ -60,6 +76,7 @@ Menambah module baru: bikin folder di `app/modules/`, lalu daftarkan di `create_
 |---|---|---|---|
 | `GET` | `/health` | siapa saja | - |
 | `GET` | `/health/db` | monitoring | - |
+| `GET` | `/health/webhook` | monitoring | - |
 | `POST` | `/api/v1/auth/login` | dashboard TRC | `Bearer CLIENT_SECRET` |
 | `GET` | `/api/v1/auth/check-session` | dashboard TRC | `Bearer <JWT>` |
 | `POST` | `/api/v1/auth/logout` | dashboard TRC | `Bearer <JWT>` |
@@ -79,7 +96,6 @@ cp .env.example .env
 # untuk attachment: SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
 # untuk stats + login: CLIENT_SECRET
 # untuk login dashboard: JWT_SECRET
-# untuk agent evaluasi lead: OPENAI_API_KEY atau DEEPSEEK_API_KEY (sesuai LLM_PROVIDER di constants.py)
 
 # 3. Jalankan server
 uv run dev          # http://localhost:$APP_PORT  (reload)

@@ -1,8 +1,8 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CHAR, BigInteger, Boolean, ForeignKey, SmallInteger, String, text
-from sqlalchemy.dialects.postgresql import ENUM, JSON, UUID
+from sqlalchemy import CHAR, BigInteger, Boolean, ForeignKey, SmallInteger, String, Text, text
+from sqlalchemy.dialects.postgresql import ENUM, JSON, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -36,6 +36,11 @@ CHAT_TYPES = (
     "template",
 )
 
+EVENT_STATUS_PENDING = "pending"
+EVENT_STATUS_PROCESSING = "processing"
+EVENT_STATUS_DONE = "done"
+EVENT_STATUS_FAILED = "failed"
+
 CHAT_STATUS_SENT = "sent"
 CHAT_STATUS_DELIVERED = "delivered"
 CHAT_STATUS_READ = "read"
@@ -59,6 +64,14 @@ SENDER_TYPE_ENUM = ENUM(
     SENDER_TYPE_USER, SENDER_TYPE_ADMIN, name="wac_sender_type_enum", create_type=False
 )
 CHAT_TYPE_ENUM = ENUM(*CHAT_TYPES, name="wac_type_enum", create_type=False)
+WEBHOOK_EVENT_STATUS_ENUM = ENUM(
+    EVENT_STATUS_PENDING,
+    EVENT_STATUS_PROCESSING,
+    EVENT_STATUS_DONE,
+    EVENT_STATUS_FAILED,
+    name="wwe_status_enum",
+    create_type=False,
+)
 CHAT_STATUS_ENUM = ENUM(
     CHAT_STATUS_SENT,
     CHAT_STATUS_DELIVERED,
@@ -117,3 +130,19 @@ class WaChat(Base):
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP")
     )
+
+
+class WaWebhookEvent(Base):
+    """Satu event webhook Meta apa adanya; ditulis sebelum 200 dibalas supaya tidak bisa hilang."""
+
+    __tablename__ = "wa_webhook_events"
+
+    id: Mapped[str] = mapped_column(CHAR(21), primary_key=True, server_default=text("nanoid()"))
+    app_id: Mapped[str] = mapped_column(String)
+    payload: Mapped[Any] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(WEBHOOK_EVENT_STATUS_ENUM, server_default=text("'pending'"))
+    attempts: Mapped[int] = mapped_column(SmallInteger, server_default=text("0"))
+    error: Mapped[str | None] = mapped_column(Text)
+    received_at: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))
+    claimed_at: Mapped[datetime | None]
+    processed_at: Mapped[datetime | None]

@@ -1,3 +1,4 @@
+import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -7,16 +8,16 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import session_scope
-from app.modules.agents.lead_evaluation.service import LeadEvaluationService
 from app.modules.meta.repository import MetaAppRepository
-from app.modules.whatsapp.schema import WAWebhookBody
-from app.modules.whatsapp.service import WhatsAppWebhookService
+from app.modules.whatsapp.drain import WebhookEventDrainer
+from app.modules.whatsapp.repository import WaWebhookEventRepository
 from app.shared.security import verify_meta_signature, verify_meta_token
 
 logger = logging.getLogger(__name__)
 
-ServiceFactory = Callable[[AsyncSession], WhatsAppWebhookService]
-EvaluatorFactory = Callable[[AsyncSession], LeadEvaluationService]
+EventsFactory = Callable[[AsyncSession], WaWebhookEventRepository]
+
+WA_OBJECT = "whatsapp_business_account"
 
 
 @dataclass(frozen=True)
@@ -40,22 +41,9 @@ async def resolve_app_credentials(app_id: str) -> AppCredentials | None:
 
 
 def register_whatsapp_routes(
-    rg: APIRouter, build_service: ServiceFactory, build_evaluator: EvaluatorFactory
+    rg: APIRouter, build_events: EventsFactory, drainer: WebhookEventDrainer
 ) -> None:
     router = APIRouter(prefix="/webhook/whatsapp", tags=["webhook:whatsapp-meta"])
-
-    async def process(payload: WAWebhookBody) -> None:
-        # Session sendiri: session milik request sudah ditutup waktu background task jalan.
-        async with session_scope() as session:
-            conv_ids = await build_service(session).process(payload)
-
-        # Evaluasi di session terpisah supaya panggilan LLM tidak menahan koneksi tulis.
-        for conv_id in conv_ids:
-            try:
-                async with session_scope() as session:
-                    await build_evaluator(session).evaluate(conv_id)
-            except Exception:
-                logger.exception(f"lead-eval: unhandled failure for {conv_id}")
 
     # Segmen app_id wajib: tanpa itu app_secret pemanggil tak bisa ditentukan.
 
@@ -92,12 +80,23 @@ def register_whatsapp_routes(
             if not verify_meta_signature(raw_body, signature, creds.app_secret):
                 raise HTTPException(status_code=401, detail="Invalid signature")
 
-        payload = WAWebhookBody.model_validate_json(raw_body)
-        if payload.object != "whatsapp_business_account":
+        try:
+            payload = json.loads(raw_body)
+        except ValueError:
+            # Tidak ada yang bisa disimpan dan mengulang tak akan menolong, jadi tetap 200.
+            logger.warning(f"wa-meta webhook: body bukan JSON dari app_id={app_id}")
             return Response(status_code=200)
 
-        # Meta mengulang kirim kalau tidak dibalas cepat, jadi persist-nya di background.
-        background_tasks.add_task(process, payload)
+        if not isinstance(payload, dict) or payload.get("object") != WA_OBJECT:
+            return Response(status_code=200)
+
+        # Catat dulu, balas 200 sesudahnya: sejak baris ini commit, event tidak bisa hilang lagi.
+        async with session_scope() as session:
+            event_id = await build_events(session).record(app_id=app_id, payload=payload)
+            await session.commit()
+
+        # Pemrosesan tetap di luar jalur balasan; kalau mati di tengah, sweeper melanjutkannya.
+        background_tasks.add_task(drainer.drain_one, event_id)
         return Response(status_code=200)
 
     rg.include_router(router)

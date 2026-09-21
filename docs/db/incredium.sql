@@ -82,6 +82,15 @@ CREATE TYPE wa_alert_status_enum AS ENUM (
   'bounced'
 );
 
+-- Enumeration for the wa_webhook_events table (wwe_*)
+
+CREATE TYPE wwe_status_enum AS ENUM (
+  'pending',
+  'processing',
+  'done',
+  'failed'
+);
+
 ------------
 -- Tables --
 ------------
@@ -205,6 +214,18 @@ CREATE TABLE wa_alerts (
   updated_at        TIMESTAMPTZ           NOT NULL  DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE wa_webhook_events (
+  id            CHAR(21)         PRIMARY KEY  DEFAULT nanoid(),
+  app_id        VARCHAR          NOT NULL,
+  payload       JSONB            NOT NULL,
+  status        wwe_status_enum  NOT NULL     DEFAULT 'pending',
+  attempts      SMALLINT         NOT NULL     DEFAULT 0,
+  error         TEXT                 NULL,
+  received_at   TIMESTAMPTZ      NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  claimed_at    TIMESTAMPTZ          NULL,
+  processed_at  TIMESTAMPTZ          NULL
+);
+
 ----------------
 -- References --
 ----------------
@@ -258,3 +279,8 @@ CREATE INDEX meta_connections_meta_app_id_idx  ON meta_connections (meta_app_id)
 CREATE INDEX wa_conversations_tenant_id_idx  ON wa_conversations (tenant_id);
 CREATE INDEX wa_chats_conv_id_idx            ON wa_chats (conv_id);
 CREATE INDEX wa_alerts_conv_id_idx           ON wa_alerts (conv_id);
+
+-- Webhook Meta
+
+CREATE INDEX wa_webhook_events_status_idx       ON wa_webhook_events (status, received_at);
+CREATE INDEX wa_webhook_events_received_at_idx  ON wa_webhook_events (received_at DESC);

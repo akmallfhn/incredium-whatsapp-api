@@ -1,7 +1,8 @@
 """Satu-satunya tempat wiring: semua repository/service/routes dirakit di sini."""
 
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import APIRouter, FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -11,10 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import constants
 from app.core.config import settings
 from app.db.session import dispose_engine, init_engine
-from app.modules.agents.lead_evaluation.llm import evaluate_with_llm
-from app.modules.agents.lead_evaluation.repository import LeadEvalRepository
-from app.modules.agents.lead_evaluation.service import LeadEvaluationService
-from app.modules.agents.llm import is_configured
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.routes import register_auth_routes
 from app.modules.auth.service import AuthService
@@ -24,8 +21,13 @@ from app.modules.stat.repository import StatRepository
 from app.modules.stat.routes import register_stat_routes
 from app.modules.stat.service import StatService
 from app.modules.tenant.repository import TenantRepository
+from app.modules.whatsapp.drain import WebhookEventDrainer
 from app.modules.whatsapp.meta_client import MetaMediaClient
-from app.modules.whatsapp.repository import WaChatRepository, WaConversationRepository
+from app.modules.whatsapp.repository import (
+    WaChatRepository,
+    WaConversationRepository,
+    WaWebhookEventRepository,
+)
 from app.modules.whatsapp.routes import register_whatsapp_routes
 from app.modules.whatsapp.service import WhatsAppWebhookService
 from app.shared.http import close_http_client, http_client
@@ -56,12 +58,14 @@ def build_whatsapp_service(session: AsyncSession) -> WhatsAppWebhookService:
     )
 
 
-def build_lead_evaluation_service(session: AsyncSession) -> LeadEvaluationService:
-    return LeadEvaluationService(
-        repo=LeadEvalRepository(session),
-        evaluate=evaluate_with_llm,
-        enabled=is_configured(),
-    )
+def build_webhook_events(session: AsyncSession) -> WaWebhookEventRepository:
+    return WaWebhookEventRepository(session)
+
+
+# Hidup selama proses; pekerjaannya sendiri ada di Postgres, bukan di memori.
+webhook_drainer = WebhookEventDrainer(
+    build_service=build_whatsapp_service, build_events=build_webhook_events
+)
 
 
 def build_stat_service(session: AsyncSession) -> StatService:
@@ -79,8 +83,14 @@ async def lifespan(app: FastAPI):
     # Gagal cepat di startup daripada baru ketahuan waktu event pertama dari Meta masuk.
     init_engine()
 
+    # Menyelesaikan event yang tertinggal karena proses sebelumnya mati sebelum selesai.
+    sweeper = asyncio.create_task(webhook_drainer.run_forever())
+
     yield
 
+    sweeper.cancel()
+    with suppress(asyncio.CancelledError):
+        await sweeper
     await close_http_client()
     await dispose_engine()
 
@@ -91,11 +101,11 @@ def create_app() -> FastAPI:
     app.add_exception_handler(ApiError, api_error_handler)
     app.add_exception_handler(RequestValidationError, validation_error_handler)
 
-    register_health_routes(app.router)
+    register_health_routes(app.router, build_webhook_events)
 
     api = APIRouter(prefix="/api/v1")
     register_auth_routes(api, build_auth_service)
-    register_whatsapp_routes(api, build_whatsapp_service, build_lead_evaluation_service)
+    register_whatsapp_routes(api, build_webhook_events, webhook_drainer)
     register_stat_routes(api, build_stat_service)
     app.include_router(api)
 
