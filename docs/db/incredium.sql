@@ -257,6 +257,9 @@ CREATE INDEX meta_connections_meta_app_id_idx  ON meta_connections (meta_app_id)
 
 CREATE INDEX wa_conversations_tenant_id_idx  ON wa_conversations (tenant_id);
 CREATE INDEX wa_chats_conv_id_idx            ON wa_chats (conv_id);
+-- Dedup attachment: file dengan sha256 yang sama memakai ulang storage_url yang sudah ada.
+CREATE INDEX wa_chats_attachment_sha256_idx  ON wa_chats ((attachment ->> 'sha256'))
+  WHERE (attachment ->> 'storage_url') IS NOT NULL;
 
 -- Webhook Meta
 

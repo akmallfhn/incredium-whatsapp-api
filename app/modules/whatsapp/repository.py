@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, case, delete, func, or_, select, update
+from sqlalchemy import and_, case, delete, func, literal_column, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -54,6 +54,23 @@ class WaChatRepository:
         if conv_id is not None:
             stmt = stmt.where(WaChat.conv_id == conv_id)
         return (await self._session.execute(stmt.limit(1))).scalars().first()
+
+    async def find_storage_url_by_sha256(self, *, tenant_id: str, sha256: str) -> str | None:
+        """URL file yang isinya sama di tenant ini; ekspresinya harus persis index parsialnya."""
+        sha_expr = WaChat.attachment.op("->>")(literal_column("'sha256'"))
+        url_expr = WaChat.attachment.op("->>")(literal_column("'storage_url'"))
+        stmt = (
+            select(url_expr)
+            .join(WaConversation, WaConversation.id == WaChat.conv_id)
+            .where(
+                sha_expr == sha256,
+                url_expr.is_not(None),
+                WaConversation.tenant_id == tenant_id,
+            )
+            .order_by(WaChat.created_at)
+            .limit(1)
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none()
 
     async def upsert_message(
         self,

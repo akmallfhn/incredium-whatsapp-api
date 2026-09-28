@@ -316,6 +316,10 @@ class WhatsAppWebhookService:
         if not ctx.access_token or not media_id or not self._storage.enabled:
             return attachment
 
+        existing_url = await self._find_existing_media(ctx, attachment.get("sha256"))
+        if existing_url:
+            return {**attachment, "storage_url": existing_url}
+
         try:
             content, mime_type = await self._media.fetch(
                 access_token=ctx.access_token,
@@ -336,6 +340,19 @@ class WhatsAppWebhookService:
         except Exception:
             logger.exception(f"wa-meta webhook: failed to save media {media_id}")
             return attachment
+
+    async def _find_existing_media(self, ctx: ConnectionContext, sha256: Any) -> str | None:
+        """File yang sama pernah disimpan tenant ini; gagal lookup cukup berarti upload ulang."""
+        if not sha256:
+            return None
+        try:
+            return await self._chats.find_storage_url_by_sha256(
+                tenant_id=ctx.tenant_id, sha256=str(sha256)
+            )
+        except Exception:
+            await self._session.rollback()
+            logger.exception(f"wa-meta webhook: lookup sha256 {sha256} gagal")
+            return None
 
     async def _shrink_pdf(self, content: bytes, media_id: str) -> bytes:
         """Di thread terpisah: pikepdf/Pillow CPU-bound dan akan menahan event loop webhook."""
