@@ -2,9 +2,9 @@
 
 Read-only aggregate endpoints untuk dashboard evaluasi 360° WhatsApp brand deals: volume percakapan harian, response time (median/p90), heatmap jam inbound, funnel lead status beserta nilai project, daftar chat tanpa balasan, dan daftar brand deal yang sedang berjalan.
 
-Semua angka dihitung langsung dari `wa_conversations` + `wa_chats` dan di-scope per tenant lewat `tenant_id` — tidak ada laporan manual dan tidak ada tabel agregat terpisah. Semua endpoint memakai `POST`, diautentikasi dengan Bearer token statis dari environment `CLIENT_SECRET`.
+Semua angka dihitung langsung dari `wa_conversations` + `wa_chats`, dengan data lead dari `wa_leads` dan `wa_lead_stages`, dan di-scope per tenant lewat `tenant_id` — tidak ada laporan manual dan tidak ada tabel agregat terpisah. Semua endpoint memakai `POST`, diautentikasi dengan Bearer token statis dari environment `CLIENT_SECRET`.
 
-Percakapan dengan `wa_conversations.is_internal = true` — kontak tim sendiri — dibuang dari **seluruh** endpoint di halaman ini: tidak masuk hitungan volume, response time, heatmap, funnel, maupun kedua daftar. Flag ini di-set dari sisi CRM, bukan lewat API ini, dan defaultnya `false`.
+Percakapan dengan `wa_leads.is_internal = true` — kontak tim sendiri — dibuang dari **seluruh** endpoint di halaman ini: tidak masuk hitungan volume, response time, heatmap, funnel, maupun kedua daftar. Flag ini di-set dari sisi CRM, bukan lewat API ini, dan defaultnya `false`.
 
 Setiap request menerima `start_date`/`end_date` (inklusif, format `YYYY-MM-DD`) dan `timezone` (nama IANA, default `Asia/Jakarta`). Bucket harian dan heatmap dihitung pada zona waktu tersebut, bukan UTC. Jika `start_date`/`end_date` dikosongkan, rentang default adalah 30 hari terakhir sampai hari ini; rentang maksimum 366 hari.
 
@@ -326,7 +326,7 @@ Mengembalikan sebaran pesan masuk dan pesan keluar per kombinasi hari dalam ming
 
 ### `POST {base_url}/api/v1/stats/lead-status`
 
-Mengembalikan funnel percakapan per `lead_status`, beserta pembagian mode AI/human, rata-rata winning rate, dan nilai project yang tertahan di tiap stage.
+Mengembalikan funnel percakapan per stage lead milik tenant, beserta pembagian mode AI/human, rata-rata winning rate, dan nilai project yang tertahan di tiap stage.
 
 **Method:** `POST`
 
@@ -366,6 +366,7 @@ Mengembalikan funnel percakapan per `lead_status`, beserta pembagian mode AI/hum
     "list": [
       {
         "lead_status": "cold",
+        "stage_name": "Cold",
         "conversation_count": 5,
         "mode_ai_count": 5,
         "mode_human_count": 0,
@@ -375,6 +376,7 @@ Mengembalikan funnel percakapan per `lead_status`, beserta pembagian mode AI/hum
       },
       {
         "lead_status": "qualified",
+        "stage_name": "Qualified",
         "conversation_count": 3,
         "mode_ai_count": 2,
         "mode_human_count": 1,
@@ -384,6 +386,7 @@ Mengembalikan funnel percakapan per `lead_status`, beserta pembagian mode AI/hum
       },
       {
         "lead_status": "rate_card_sent",
+        "stage_name": "Rate Card Sent",
         "conversation_count": 2,
         "mode_ai_count": 0,
         "mode_human_count": 2,
@@ -393,6 +396,7 @@ Mengembalikan funnel percakapan per `lead_status`, beserta pembagian mode AI/hum
       },
       {
         "lead_status": "negotiation",
+        "stage_name": "Negotiation",
         "conversation_count": 1,
         "mode_ai_count": 0,
         "mode_human_count": 1,
@@ -402,6 +406,7 @@ Mengembalikan funnel percakapan per `lead_status`, beserta pembagian mode AI/hum
       },
       {
         "lead_status": "closed",
+        "stage_name": "Closed",
         "conversation_count": 0,
         "mode_ai_count": 0,
         "mode_human_count": 0,
@@ -416,7 +421,7 @@ Mengembalikan funnel percakapan per `lead_status`, beserta pembagian mode AI/hum
 
 Rentang tanggal difilter pada `wa_conversations.created_at`, bukan pada aktivitas chat.
 
-`lead_status` adalah stage funnel dan selalu dikembalikan lengkap dalam urutan `cold` → `qualified` → `rate_card_sent` → `negotiation` → `closed`. Stage tanpa percakapan tetap muncul dengan hitungan `0` supaya funnel tidak bolong.
+Daftar stage diambil dari `wa_lead_stages` milik tenant, jadi isi dan jumlahnya bisa berbeda per tenant. `lead_status` adalah `key` stage — identitas tetap yang juga dipakai sebagai filter — dan `stage_name` adalah label tampilannya. Semua stage aktif selalu dikembalikan sesuai urutan `position`; stage tanpa percakapan tetap muncul dengan hitungan `0` supaya funnel tidak bolong. Percakapan yang belum punya stage dihitung di stage pertama.
 
 `project_value` adalah nilai project per percakapan dalam Rupiah penuh (tanpa desimal) dan boleh `null` selama belum ditentukan. `valued_conversation_count` menghitung percakapan yang `project_value`-nya sudah terisi, jadi `total_project_value` bisa dibaca sebagai nilai yang tertahan di stage tersebut — bukan estimasi seluruh percakapan di stage itu.
 
@@ -591,4 +596,4 @@ Dua elemen dashboard pada dokumen evaluasi masih belum punya sumber data di sche
 | Lost reason | Kolom alasan saat percakapan ditutup |
 | Cycle time inbound → closed | Timestamp saat stage closed tercapai |
 
-Funnel `Inbound → Qualified → Rate card → Nego → Closed` sudah dilayani `POST /stats/lead-status` sejak `wa_lead_status_enum` memakai stage `cold` → `qualified` → `rate_card_sent` → `negotiation` → `closed`. Estimasi leakage (Rp) bisa dirakit dari `total_project_value` per stage pada endpoint yang sama, digabung dengan `project_value` pada `POST /stats/unanswered/list` dan `POST /stats/needs-action/list`.
+Funnel `Inbound → Qualified → Rate card → Nego → Closed` sudah dilayani `POST /stats/lead-status` lewat stage bawaan `cold` → `qualified` → `rate_card_sent` → `negotiation` → `closed` di `wa_lead_stages`; tenant lain boleh memakai stage berbeda. Estimasi leakage (Rp) bisa dirakit dari `total_project_value` per stage pada endpoint yang sama, digabung dengan `project_value` pada `POST /stats/unanswered/list` dan `POST /stats/needs-action/list`.

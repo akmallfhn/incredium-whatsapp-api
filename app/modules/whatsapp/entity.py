@@ -6,6 +6,7 @@ from sqlalchemy.dialects.postgresql import ENUM, JSON, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.modules.tenant.entity import STATUS_ENUM
 
 DIRECTION_INBOUND = "inbound"
 DIRECTION_OUTBOUND = "outbound"
@@ -48,15 +49,6 @@ CHAT_STATUS_READ = "read"
 CHAT_STATUS_FAILED = "failed"
 
 # create_type=False: enum-nya sudah ada di Postgres, dibuat lewat DDL di docs/db.
-LEAD_STATUS_ENUM = ENUM(
-    "cold",
-    "qualified",
-    "rate_card_sent",
-    "negotiation",
-    "closed",
-    name="wa_lead_status_enum",
-    create_type=False,
-)
 MODE_ENUM = ENUM(MODE_AI, MODE_HUMAN, name="wa_mode_enum", create_type=False)
 DIRECTION_ENUM = ENUM(
     DIRECTION_INBOUND, DIRECTION_OUTBOUND, name="wac_direction_enum", create_type=False
@@ -85,7 +77,7 @@ CHAT_STATUS_ENUM = ENUM(
 
 
 class WaConversation(Base):
-    """Satu thread WhatsApp antara tenant dan satu nomor pelanggan."""
+    """Satu thread WhatsApp antara tenant dan satu nomor pelanggan; hanya fakta dari webhook."""
 
     __tablename__ = "wa_conversations"
 
@@ -93,16 +85,51 @@ class WaConversation(Base):
     tenant_id: Mapped[str] = mapped_column(CHAR(21), ForeignKey("tenants.id"))
     full_name: Mapped[str] = mapped_column(String)
     phone_number: Mapped[str] = mapped_column(String)
-    brand_name: Mapped[str | None] = mapped_column(String)
+    last_read_id: Mapped[str | None] = mapped_column(CHAR(21))
+    created_at: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP")
+    )
+
+
+class WaLeadStage(Base):
+    """Satu tahap lead milik tenant; urutan funnel ditentukan position."""
+
+    __tablename__ = "wa_lead_stages"
+
+    id: Mapped[str] = mapped_column(CHAR(21), primary_key=True, server_default=text("nanoid()"))
+    tenant_id: Mapped[str] = mapped_column(CHAR(21), ForeignKey("tenants.id"))
+    key: Mapped[str] = mapped_column(String)
+    name: Mapped[str] = mapped_column(String)
+    # Kriteria tahap ini dalam bahasa manusia; jadi bahan prompt agent penilai lead.
+    description: Mapped[str | None] = mapped_column(Text)
+    position: Mapped[int] = mapped_column(SmallInteger)
+    status: Mapped[str] = mapped_column(STATUS_ENUM, server_default=text("'active'"))
+    created_at: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))
+    updated_at: Mapped[datetime] = mapped_column(
+        server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP")
+    )
+
+
+class WaLead(Base):
+    """Data lead satu percakapan, diatur manusia atau LLM; relasi 1-1 dengan wa_conversations."""
+
+    __tablename__ = "wa_leads"
+
+    conv_id: Mapped[str] = mapped_column(
+        CHAR(21), ForeignKey("wa_conversations.id", ondelete="CASCADE"), primary_key=True
+    )
+    stage_id: Mapped[str | None] = mapped_column(CHAR(21), ForeignKey("wa_lead_stages.id"))
     handler_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False))
-    lead_status: Mapped[str] = mapped_column(LEAD_STATUS_ENUM, server_default=text("'cold'"))
-    project_value: Mapped[int | None] = mapped_column(BigInteger)
-    winning_rate: Mapped[int] = mapped_column(SmallInteger, server_default=text("0"))
     mode: Mapped[str] = mapped_column(MODE_ENUM, server_default=text("'human'"))
-    note: Mapped[str | None] = mapped_column(String)
     # Kontak tim sendiri; percakapannya dibuang dari semua query stat.
     is_internal: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
-    last_read_id: Mapped[str | None] = mapped_column(CHAR(21))
+    brand_name: Mapped[str | None] = mapped_column(String)
+    project_value: Mapped[int | None] = mapped_column(BigInteger)
+    winning_rate: Mapped[int] = mapped_column(SmallInteger, server_default=text("0"))
+    note: Mapped[str | None] = mapped_column(String)
+    # Chat terakhir yang sudah dinilai LLM; sama dengan chat terakhir berarti tidak perlu dinilai.
+    evaluated_last_chat_id: Mapped[str | None] = mapped_column(CHAR(21), ForeignKey("wa_chats.id"))
     created_at: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP")

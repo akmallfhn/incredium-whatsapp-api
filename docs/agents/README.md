@@ -4,7 +4,7 @@ Agent automation yang jalan di atas database Incredium. Semuanya LangGraph, dipi
 
 | Agent | Pemicu | Yang diubah |
 |---|---|---|
-| [Lead Evaluation](lead-evaluation.md) | Webhook WhatsApp: pesan masuk dan echo pesan keluar | `wa_conversations.brand_name`, `project_value`, `lead_status`, `note` |
+| [Lead Evaluation](lead-evaluation.md) | Webhook WhatsApp: pesan masuk dan echo pesan keluar | `wa_leads.brand_name`, `project_value`, `stage_id`, `note` |
 
 ## Tata letak
 

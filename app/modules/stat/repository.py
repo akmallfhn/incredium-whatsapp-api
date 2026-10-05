@@ -16,7 +16,8 @@ TURNS_CTE = """
         SELECT c.id, c.conv_id, c.direction, c.created_at
         FROM wa_chats c
         JOIN wa_conversations v ON v.id = c.conv_id
-        WHERE v.tenant_id = :tenant_id AND NOT v.is_internal
+        LEFT JOIN wa_leads l ON l.conv_id = v.id
+        WHERE v.tenant_id = :tenant_id AND l.is_internal IS NOT TRUE
     ),
     ordered AS (
         SELECT id, conv_id, direction, created_at,
@@ -47,7 +48,8 @@ _LAST_MESSAGE_CTE = """
             c.conv_id, c.direction, c.created_at, c.type, c.message
         FROM wa_chats c
         JOIN wa_conversations v ON v.id = c.conv_id
-        WHERE v.tenant_id = :tenant_id AND NOT v.is_internal
+        LEFT JOIN wa_leads l ON l.conv_id = v.id
+        WHERE v.tenant_id = :tenant_id AND l.is_internal IS NOT TRUE
         ORDER BY c.conv_id, c.created_at DESC, c.id DESC
     )
 """
@@ -107,16 +109,21 @@ _RESPONSE_AGGREGATES = """
 """
 
 
+# Data lead dan stage-nya; LEFT JOIN supaya percakapan tanpa baris wa_leads tetap terhitung.
+_LEAD_JOIN = """
+    LEFT JOIN wa_leads l ON l.conv_id = v.id
+    LEFT JOIN wa_lead_stages s ON s.id = l.stage_id
+"""
+
 # Semua filter opsional dibanding lewat CAST eksplisit: asyncpg tidak bisa menebak tipe NULL.
 _CONVERSATION_WHERE = """
-    v.tenant_id = :tenant_id AND NOT v.is_internal
+    v.tenant_id = :tenant_id AND l.is_internal IS NOT TRUE
     AND (CAST(:start_at AS timestamptz) IS NULL OR v.created_at >= CAST(:start_at AS timestamptz))
     AND (CAST(:end_at AS timestamptz) IS NULL OR v.created_at < CAST(:end_at AS timestamptz))
-    AND (CAST(:lead_status AS text) IS NULL
-         OR v.lead_status = CAST(:lead_status AS wa_lead_status_enum))
-    AND (NOT CAST(:only_with_brand AS boolean) OR v.brand_name IS NOT NULL)
+    AND (CAST(:lead_status AS text) IS NULL OR s.key = CAST(:lead_status AS text))
+    AND (NOT CAST(:only_with_brand AS boolean) OR l.brand_name IS NOT NULL)
     AND (CAST(:min_project_value AS bigint) IS NULL
-         OR v.project_value >= CAST(:min_project_value AS bigint))
+         OR l.project_value >= CAST(:min_project_value AS bigint))
 """
 
 
@@ -146,9 +153,10 @@ class StatRepository:
                 WHERE direction = 'inbound' AND created_at >= :start_at AND created_at < :end_at
             ),
             fresh AS (
-                SELECT id FROM wa_conversations
-                WHERE tenant_id = :tenant_id AND NOT is_internal
-                  AND created_at >= :start_at AND created_at < :end_at
+                SELECT v.id FROM wa_conversations v
+                LEFT JOIN wa_leads l ON l.conv_id = v.id
+                WHERE v.tenant_id = :tenant_id AND l.is_internal IS NOT TRUE
+                  AND v.created_at >= :start_at AND v.created_at < :end_at
             )
             SELECT
                 (SELECT COUNT(*) FROM active) AS active_conversation_count,
@@ -189,7 +197,8 @@ class StatRepository:
                     (v.created_at AT TIME ZONE :tz)::date AS conversation_started_on
                 FROM wa_chats c
                 JOIN wa_conversations v ON v.id = c.conv_id
-                WHERE v.tenant_id = :tenant_id AND NOT v.is_internal
+                LEFT JOIN wa_leads l ON l.conv_id = v.id
+                WHERE v.tenant_id = :tenant_id AND l.is_internal IS NOT TRUE
                   AND c.direction = 'inbound'
                   AND c.created_at >= :start_at AND c.created_at < :end_at
             )
@@ -274,7 +283,8 @@ class StatRepository:
                     AS conversation_count
             FROM wa_chats c
             JOIN wa_conversations v ON v.id = c.conv_id
-            WHERE v.tenant_id = :tenant_id AND NOT v.is_internal
+            LEFT JOIN wa_leads l ON l.conv_id = v.id
+            WHERE v.tenant_id = :tenant_id AND l.is_internal IS NOT TRUE
               AND c.created_at >= :start_at AND c.created_at < :end_at
             GROUP BY 1, 2
             ORDER BY 1, 2
@@ -287,29 +297,39 @@ class StatRepository:
     async def lead_status(
         self, *, tenant_id: str, start_at: datetime, end_at: datetime
     ) -> list[dict[str, Any]]:
-        # Stage tanpa percakapan tetap dikembalikan (hitungan nol) supaya funnel tidak bolong.
+        # Stage kosong tetap muncul (nol) supaya funnel utuh; lead tanpa stage masuk stage pertama.
         stmt = text("""
             WITH stages AS (
-                SELECT unnest(enum_range(NULL::wa_lead_status_enum)) AS lead_status
+                SELECT id, key, name, position
+                FROM wa_lead_stages
+                WHERE tenant_id = :tenant_id AND status = 'active'
             ),
             convs AS (
-                SELECT lead_status, mode, winning_rate, project_value
-                FROM wa_conversations
-                WHERE tenant_id = :tenant_id AND NOT is_internal
-                  AND created_at >= :start_at AND created_at < :end_at
+                SELECT
+                    COALESCE(
+                        l.stage_id, (SELECT id FROM stages ORDER BY position LIMIT 1)
+                    ) AS stage_id,
+                    COALESCE(l.mode, 'human') AS mode,
+                    l.winning_rate,
+                    l.project_value
+                FROM wa_conversations v
+                LEFT JOIN wa_leads l ON l.conv_id = v.id
+                WHERE v.tenant_id = :tenant_id AND l.is_internal IS NOT TRUE
+                  AND v.created_at >= :start_at AND v.created_at < :end_at
             )
             SELECT
-                s.lead_status,
-                COUNT(c.lead_status) AS conversation_count,
+                s.key AS lead_status,
+                s.name AS stage_name,
+                COUNT(c.stage_id) AS conversation_count,
                 COUNT(*) FILTER (WHERE c.mode = 'ai') AS mode_ai_count,
                 COUNT(*) FILTER (WHERE c.mode = 'human') AS mode_human_count,
                 COALESCE(ROUND(AVG(c.winning_rate))::int, 0) AS avg_winning_rate,
                 COUNT(c.project_value) AS valued_conversation_count,
                 COALESCE(SUM(c.project_value), 0)::bigint AS total_project_value
             FROM stages s
-            LEFT JOIN convs c ON c.lead_status = s.lead_status
-            GROUP BY s.lead_status
-            ORDER BY s.lead_status
+            LEFT JOIN convs c ON c.stage_id = s.id
+            GROUP BY s.id, s.key, s.name, s.position
+            ORDER BY s.position
         """)
         result = await self._session.execute(
             stmt, {"tenant_id": tenant_id, "start_at": start_at, "end_at": end_at}
@@ -325,19 +345,20 @@ class StatRepository:
                 v.id AS conv_id,
                 v.full_name,
                 v.phone_number,
-                v.brand_name,
-                v.lead_status,
-                v.project_value,
-                v.note,
+                l.brand_name,
+                s.key AS lead_status,
+                l.project_value,
+                l.note,
                 COUNT(*) AS unanswered_turn_count,
                 MIN(r.inbound_at) AS first_unanswered_at,
                 MAX(r.inbound_at) AS last_unanswered_at,
                 ROUND(EXTRACT(EPOCH FROM (NOW() - MIN(r.inbound_at))) / 3600)::int AS waiting_hours
             FROM resolved r
             JOIN wa_conversations v ON v.id = r.conv_id
+            {_LEAD_JOIN}
             WHERE r.replied_at IS NULL
-            GROUP BY v.id, v.full_name, v.phone_number, v.brand_name,
-                     v.lead_status, v.project_value, v.note
+            GROUP BY v.id, v.full_name, v.phone_number, l.brand_name,
+                     s.key, l.project_value, l.note
             ORDER BY MIN(r.inbound_at)
             LIMIT :limit OFFSET :skip
         """)
@@ -373,21 +394,22 @@ class StatRepository:
                 v.id AS conv_id,
                 v.full_name,
                 v.phone_number,
-                v.brand_name,
-                v.lead_status,
-                v.project_value,
-                v.winning_rate,
-                v.mode,
-                v.note,
+                l.brand_name,
+                s.key AS lead_status,
+                l.project_value,
+                l.winning_rate,
+                l.mode,
+                l.note,
                 lm.created_at AS last_message_at,
                 lm.direction AS last_message_direction,
                 lm.type AS last_message_type,
                 LEFT(lm.message, 120) AS last_message_preview,
                 ROUND(EXTRACT(EPOCH FROM (NOW() - lm.created_at)) / 3600)::int AS idle_hours
             FROM wa_conversations v
+            {_LEAD_JOIN}
             LEFT JOIN last_message lm ON lm.conv_id = v.id
-            WHERE v.tenant_id = :tenant_id AND NOT v.is_internal
-              AND v.brand_name IS NOT NULL
+            WHERE v.tenant_id = :tenant_id AND NOT l.is_internal
+              AND l.brand_name IS NOT NULL
             ORDER BY lm.created_at
             LIMIT :limit OFFSET :skip
         """)
@@ -412,14 +434,15 @@ class StatRepository:
         stmt = text(f"""
             SELECT
                 v.id AS conv_id,
-                v.brand_name,
+                l.brand_name,
                 v.full_name,
-                v.lead_status::text AS lead_status,
-                v.project_value,
+                s.key AS lead_status,
+                l.project_value,
                 v.created_at::date AS started_date,
                 lm.last_message_at::date AS last_message_date,
                 fm.opened_by
             FROM wa_conversations v
+            {_LEAD_JOIN}
             LEFT JOIN LATERAL (
                 SELECT MAX(created_at) AS last_message_at FROM wa_chats WHERE conv_id = v.id
             ) lm ON TRUE
@@ -459,12 +482,13 @@ class StatRepository:
         """Total baris dan brand unik; dipakai penjawab supaya tidak salah sebut keduanya."""
         stmt = text(f"""
             SELECT COUNT(*) AS total_conversation_count,
-                   COUNT(DISTINCT v.brand_name) AS distinct_brand_count,
-                   COUNT(v.brand_name) AS named_brand_count,
-                   COALESCE(SUM(v.project_value), 0)::bigint AS total_project_value,
+                   COUNT(DISTINCT l.brand_name) AS distinct_brand_count,
+                   COUNT(l.brand_name) AS named_brand_count,
+                   COALESCE(SUM(l.project_value), 0)::bigint AS total_project_value,
                    COUNT(*) FILTER (WHERE fm.opened_by = 'inbound') AS opened_by_inbound_count,
                    COUNT(*) FILTER (WHERE fm.opened_by = 'outbound') AS opened_by_outbound_count
             FROM wa_conversations v
+            {_LEAD_JOIN}
             LEFT JOIN LATERAL (
                 SELECT direction::text AS opened_by FROM wa_chats
                 WHERE conv_id = v.id ORDER BY created_at, id LIMIT 1
@@ -486,8 +510,9 @@ class StatRepository:
 
     async def count_needs_action(self, *, tenant_id: str) -> int:
         stmt = text("""
-            SELECT COUNT(*) FROM wa_conversations
-            WHERE tenant_id = :tenant_id AND NOT is_internal AND brand_name IS NOT NULL
+            SELECT COUNT(*) FROM wa_conversations v
+            JOIN wa_leads l ON l.conv_id = v.id
+            WHERE v.tenant_id = :tenant_id AND NOT l.is_internal AND l.brand_name IS NOT NULL
         """)
         result = await self._session.execute(stmt, {"tenant_id": tenant_id})
         return int(result.scalar_one())

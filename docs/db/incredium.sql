@@ -21,6 +21,7 @@ CREATE TYPE user_role_enum AS ENUM (
 
 -- Enumeration for the wa_conversations table (wa_*)
 
+-- Lama: digantikan wa_lead_stages, di-drop bersama kolom lama wa_conversations.
 CREATE TYPE wa_lead_status_enum AS ENUM (
   'cold',
   'qualified',
@@ -28,6 +29,8 @@ CREATE TYPE wa_lead_status_enum AS ENUM (
   'negotiation',
   'closed'
 );
+
+-- Enumeration for the wa_leads table (wa_*)
 
 CREATE TYPE wa_mode_enum AS ENUM (
   'ai',
@@ -163,6 +166,10 @@ CREATE TABLE wa_conversations (
   tenant_id      CHAR(21)             NOT NULL,
   full_name      VARCHAR              NOT NULL,
   phone_number   VARCHAR              NOT NULL,
+  last_read_id   CHAR(21)                 NULL,
+  created_at     TIMESTAMPTZ          NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  updated_at     TIMESTAMPTZ          NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  -- Kolom lama: sudah disalin ke wa_leads, di-drop setelah kode pindah membaca wa_leads.
   brand_name     VARCHAR                  NULL,
   handler_id     UUID                     NULL,
   lead_status    wa_lead_status_enum  NOT NULL     DEFAULT 'cold',
@@ -171,9 +178,6 @@ CREATE TABLE wa_conversations (
   mode           wa_mode_enum         NOT NULL     DEFAULT 'human',
   note           VARCHAR                  NULL,
   is_internal    BOOLEAN              NOT NULL     DEFAULT false,
-  last_read_id   CHAR(21)                 NULL,
-  created_at     TIMESTAMPTZ          NOT NULL     DEFAULT CURRENT_TIMESTAMP,
-  updated_at     TIMESTAMPTZ          NOT NULL     DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (tenant_id, phone_number)
 );
 
@@ -208,6 +212,37 @@ CREATE TABLE wa_webhook_events (
   processed_at  TIMESTAMPTZ          NULL
 );
 
+-- WhatsApp leads
+
+CREATE TABLE wa_lead_stages (
+  id           CHAR(21)     PRIMARY KEY  DEFAULT nanoid(),
+  tenant_id    CHAR(21)     NOT NULL,
+  key          VARCHAR      NOT NULL,
+  name         VARCHAR      NOT NULL,
+  description  TEXT             NULL,
+  position     SMALLINT     NOT NULL,
+  status       status_enum  NOT NULL     DEFAULT 'active',
+  created_at   TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  updated_at   TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (tenant_id, key),
+  UNIQUE (tenant_id, position) DEFERRABLE INITIALLY DEFERRED
+);
+
+CREATE TABLE wa_leads (
+  conv_id                 CHAR(21)      PRIMARY KEY,
+  stage_id                CHAR(21)          NULL,
+  handler_id              UUID              NULL,
+  mode                    wa_mode_enum  NOT NULL     DEFAULT 'human',
+  is_internal             BOOLEAN       NOT NULL     DEFAULT false,
+  brand_name              VARCHAR           NULL,
+  project_value           BIGINT            NULL,
+  winning_rate            SMALLINT      NOT NULL     DEFAULT 0,
+  note                    VARCHAR           NULL,
+  evaluated_last_chat_id  CHAR(21)          NULL,
+  created_at              TIMESTAMPTZ   NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  updated_at              TIMESTAMPTZ   NOT NULL     DEFAULT CURRENT_TIMESTAMP
+);
+
 ----------------
 -- References --
 ----------------
@@ -238,6 +273,17 @@ ALTER TABLE wa_chats
   ADD FOREIGN KEY (conv_id)     REFERENCES wa_conversations (id),
   ADD FOREIGN KEY (reply_to_id) REFERENCES wa_chats (id);
 
+-- WhatsApp leads
+
+ALTER TABLE wa_lead_stages
+  ADD FOREIGN KEY (tenant_id) REFERENCES tenants (id);
+
+ALTER TABLE wa_leads
+  ADD FOREIGN KEY (conv_id)                REFERENCES wa_conversations (id) ON DELETE CASCADE,
+  ADD FOREIGN KEY (stage_id)               REFERENCES wa_lead_stages (id),
+  ADD FOREIGN KEY (handler_id)             REFERENCES users (id),
+  ADD FOREIGN KEY (evaluated_last_chat_id) REFERENCES wa_chats (id);
+
 -------------
 -- Indexes --
 -------------
@@ -255,11 +301,17 @@ CREATE INDEX meta_connections_meta_app_id_idx  ON meta_connections (meta_app_id)
 
 -- WhatsApp chat
 
-CREATE INDEX wa_conversations_tenant_id_idx  ON wa_conversations (tenant_id);
-CREATE INDEX wa_chats_conv_id_idx            ON wa_chats (conv_id);
+CREATE INDEX wa_conversations_tenant_id_idx   ON wa_conversations (tenant_id);
+-- Chat terakhir per percakapan cukup dibaca dari ujung index ini.
+CREATE INDEX wa_chats_conv_id_created_at_idx  ON wa_chats (conv_id, created_at DESC);
 -- Dedup attachment: file dengan sha256 yang sama memakai ulang storage_url yang sudah ada.
-CREATE INDEX wa_chats_attachment_sha256_idx  ON wa_chats ((attachment ->> 'sha256'))
+CREATE INDEX wa_chats_attachment_sha256_idx   ON wa_chats ((attachment ->> 'sha256'))
   WHERE (attachment ->> 'storage_url') IS NOT NULL;
+
+-- WhatsApp leads
+
+CREATE INDEX wa_leads_stage_id_idx         ON wa_leads (stage_id);
+CREATE INDEX wa_leads_brand_name_trgm_idx  ON wa_leads USING gin (brand_name gin_trgm_ops);
 
 -- Webhook Meta
 

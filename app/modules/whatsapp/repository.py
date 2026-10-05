@@ -5,6 +5,7 @@ from sqlalchemy import and_, case, delete, func, literal_column, or_, select, up
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.tenant.entity import STATUS_ACTIVE
 from app.modules.whatsapp.entity import (
     DIRECTION_OUTBOUND,
     EVENT_STATUS_DONE,
@@ -15,6 +16,8 @@ from app.modules.whatsapp.entity import (
     SENDER_TYPE_ADMIN,
     WaChat,
     WaConversation,
+    WaLead,
+    WaLeadStage,
     WaWebhookEvent,
 )
 
@@ -42,7 +45,24 @@ class WaConversationRepository:
             .returning(WaConversation)
         )
         result = await self._session.execute(stmt, execution_options={"populate_existing": True})
-        return result.scalars().one()
+        conv = result.scalars().one()
+        await self._ensure_lead(conv_id=conv.id, tenant_id=tenant_id)
+        return conv
+
+    async def _ensure_lead(self, *, conv_id: str, tenant_id: str) -> None:
+        """Baris wa_leads mulai di stage pertama tenant; DO NOTHING supaya aman saat replay."""
+        first_stage = (
+            select(WaLeadStage.id)
+            .where(WaLeadStage.tenant_id == tenant_id, WaLeadStage.status == STATUS_ACTIVE)
+            .order_by(WaLeadStage.position)
+            .limit(1)
+            .scalar_subquery()
+        )
+        await self._session.execute(
+            pg_insert(WaLead)
+            .values(conv_id=conv_id, stage_id=first_stage)
+            .on_conflict_do_nothing(index_elements=[WaLead.conv_id])
+        )
 
 
 class WaChatRepository:

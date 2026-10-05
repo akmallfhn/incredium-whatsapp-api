@@ -208,7 +208,7 @@ class StatService:
             "tenant_id": req.tenant_id,
             "start_at": start_at,
             "end_at": end_at,
-            "lead_status": req.lead_status.value if req.lead_status else None,
+            "lead_status": req.lead_status,
             "only_with_brand": req.only_with_brand,
             "min_project_value": req.min_project_value,
         }

@@ -15,16 +15,6 @@ class ResponseMode(StrEnum):
     ALL_FLAT = "all_flat"
 
 
-class LeadStatus(StrEnum):
-    """Stage funnel, urutannya sama dengan enum wa_lead_status_enum di Postgres."""
-
-    COLD = "cold"
-    QUALIFIED = "qualified"
-    RATE_CARD_SENT = "rate_card_sent"
-    NEGOTIATION = "negotiation"
-    CLOSED = "closed"
-
-
 class StatRequest(BaseModel):
     """Field dasar yang dipakai semua endpoint statistik."""
 
@@ -62,7 +52,8 @@ class ConversationListRequest(StatRequest):
 
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1)
-    lead_status: LeadStatus | None = None
+    # key dari wa_lead_stages milik tenant, misalnya "negotiation"; daftarnya beda per tenant.
+    lead_status: str | None = None
     only_with_brand: bool = False
     min_project_value: int | None = Field(default=None, ge=0)
 
