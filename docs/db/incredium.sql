@@ -19,17 +19,6 @@ CREATE TYPE user_role_enum AS ENUM (
   'Member'
 );
 
--- Enumeration for the wa_conversations table (wa_*)
-
--- Lama: digantikan wa_lead_stages, di-drop bersama kolom lama wa_conversations.
-CREATE TYPE wa_lead_status_enum AS ENUM (
-  'cold',
-  'qualified',
-  'rate_card_sent',
-  'negotiation',
-  'closed'
-);
-
 -- Enumeration for the wa_leads table (wa_*)
 
 CREATE TYPE wa_mode_enum AS ENUM (
@@ -162,22 +151,13 @@ CREATE TABLE meta_connections (
 -- WhatsApp chat
 
 CREATE TABLE wa_conversations (
-  id             CHAR(21)             PRIMARY KEY  DEFAULT nanoid(),
-  tenant_id      CHAR(21)             NOT NULL,
-  full_name      VARCHAR              NOT NULL,
-  phone_number   VARCHAR              NOT NULL,
-  last_read_id   CHAR(21)                 NULL,
-  created_at     TIMESTAMPTZ          NOT NULL     DEFAULT CURRENT_TIMESTAMP,
-  updated_at     TIMESTAMPTZ          NOT NULL     DEFAULT CURRENT_TIMESTAMP,
-  -- Kolom lama: sudah disalin ke wa_leads, di-drop setelah kode pindah membaca wa_leads.
-  brand_name     VARCHAR                  NULL,
-  handler_id     UUID                     NULL,
-  lead_status    wa_lead_status_enum  NOT NULL     DEFAULT 'cold',
-  project_value  BIGINT                   NULL,
-  winning_rate   SMALLINT             NOT NULL     DEFAULT 0,
-  mode           wa_mode_enum         NOT NULL     DEFAULT 'human',
-  note           VARCHAR                  NULL,
-  is_internal    BOOLEAN              NOT NULL     DEFAULT false,
+  id            CHAR(21)     PRIMARY KEY  DEFAULT nanoid(),
+  tenant_id     CHAR(21)     NOT NULL,
+  full_name     VARCHAR      NOT NULL,
+  phone_number  VARCHAR      NOT NULL,
+  last_read_id  CHAR(21)         NULL,
+  created_at    TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (tenant_id, phone_number)
 );
 
@@ -266,7 +246,6 @@ ALTER TABLE meta_connections
 
 ALTER TABLE wa_conversations
   ADD FOREIGN KEY (tenant_id)    REFERENCES tenants (id),
-  ADD FOREIGN KEY (handler_id)   REFERENCES users (id),
   ADD FOREIGN KEY (last_read_id) REFERENCES wa_chats (id);
 
 ALTER TABLE wa_chats
