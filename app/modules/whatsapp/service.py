@@ -1,4 +1,4 @@
-"""Event webhook Meta -> Postgres; commit per pesan biar satu gagal tak menjatuhkan sisanya."""
+"""Pemrosesan webhook Meta dan layanan baca percakapan serta chat WhatsApp."""
 
 import asyncio
 import logging
@@ -10,7 +10,9 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import constants
+from app.modules.auth.service import AuthService
 from app.modules.meta.repository import ConnectionContext, MetaConnectionRepository
+from app.modules.tenant.repository import TenantRepository
 from app.modules.whatsapp.entity import (
     CHAT_STATUS_DELIVERED,
     CHAT_STATUS_FAILED,
@@ -23,8 +25,10 @@ from app.modules.whatsapp.entity import (
 )
 from app.modules.whatsapp.meta_client import MetaMediaClient
 from app.modules.whatsapp.repository import WaChatRepository, WaConversationRepository
-from app.modules.whatsapp.schema import WAWebhookBody
+from app.modules.whatsapp.schema import ChatListRequest, ConversationListRequest, WAWebhookBody
+from app.shared import pagination
 from app.shared.pdf import shrink_pdf
+from app.shared.response import ApiError
 from app.shared.storage import SupabaseStorage
 
 logger = logging.getLogger(__name__)
@@ -362,3 +366,86 @@ class WhatsAppWebhookService:
                 f"wa-meta webhook: pdf {media_id} diperkecil {len(content)} -> {len(shrunk)} bytes"
             )
         return shrunk
+
+
+class WhatsAppListService:
+    def __init__(
+        self,
+        *,
+        auth: AuthService,
+        tenants: TenantRepository,
+        conversations: WaConversationRepository,
+        chats: WaChatRepository,
+    ) -> None:
+        self._auth = auth
+        self._tenants = tenants
+        self._conversations = conversations
+        self._chats = chats
+
+    async def conversations(self, req: ConversationListRequest, token: str) -> dict[str, Any]:
+        user = await self._auth.authenticate(token)
+        if not req.tenant_id.strip():
+            raise ApiError(400, "tenant_id is required")
+        if req.tenant_id not in user["tenant_ids"]:
+            raise ApiError(403, "tenant access denied")
+        if await self._tenants.find_by_id(req.tenant_id) is None:
+            raise ApiError(404, "tenant not found")
+
+        page, page_size = pagination.normalize(req.page, req.page_size)
+        total = await self._conversations.count_by_tenant(req.tenant_id)
+        rows = await self._conversations.list_by_tenant(
+            tenant_id=req.tenant_id, limit=page_size, skip=pagination.offset(page, page_size)
+        )
+        return {
+            "list": [
+                {
+                    "id": row.id,
+                    "tenant_id": row.tenant_id,
+                    "full_name": row.full_name,
+                    "phone_number": row.phone_number,
+                    "last_read_id": row.last_read_id,
+                    "created_at": row.created_at.isoformat(),
+                    "updated_at": row.updated_at.isoformat(),
+                }
+                for row in rows
+            ],
+            "metapaging": pagination.meta(total, page, page_size),
+        }
+
+    async def chats(self, req: ChatListRequest, token: str) -> dict[str, Any]:
+        user = await self._auth.authenticate(token)
+        if not req.conv_id.strip():
+            raise ApiError(400, "conv_id is required")
+        conv = await self._conversations.find_by_id(req.conv_id)
+        if conv is None or conv.tenant_id not in user["tenant_ids"]:
+            raise ApiError(404, "conversation not found")
+
+        page, page_size = pagination.normalize(req.page, req.page_size)
+        total = await self._chats.count_by_conversation(req.conv_id)
+        rows = await self._chats.list_by_conversation(
+            conv_id=req.conv_id, limit=page_size, skip=pagination.offset(page, page_size)
+        )
+        return {
+            "list": [
+                {
+                    "id": row.id,
+                    "conv_id": row.conv_id,
+                    "wam_id": row.wam_id,
+                    "direction": row.direction,
+                    "sender_type": row.sender_type,
+                    "reply_to_id": row.reply_to_id,
+                    "type": row.type,
+                    "message": row.message,
+                    "attachment": row.attachment,
+                    "status": row.status,
+                    "sent_at": row.sent_at.isoformat() if row.sent_at else None,
+                    "delivered_at": row.delivered_at.isoformat() if row.delivered_at else None,
+                    "read_at": row.read_at.isoformat() if row.read_at else None,
+                    "failed_at": row.failed_at.isoformat() if row.failed_at else None,
+                    "created_at": row.created_at.isoformat(),
+                    "updated_at": row.updated_at.isoformat(),
+                }
+                for row in rows
+            ],
+            "metapaging": pagination.meta(total, page, page_size),
+        }

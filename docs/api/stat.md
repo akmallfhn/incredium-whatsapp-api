@@ -18,7 +18,7 @@ Definisi **turn**: satu pesan masuk yang membuka giliran balas, yaitu inbound pe
 | `all_working` | semua turn | hanya detik yang jatuh pada Senin–Jumat 09.00–18.00 di `timezone` yang diminta |
 | `all_flat` (default) | semua turn | apa adanya |
 
-Mode berlaku untuk **seluruh** angka response di respons yang sama — `inbound_turn_count`, `replied_turn_count`, `unanswered_*`, median, p90, dan `within_target_*` — supaya satu payload tidak pernah mencampur dua definisi. Pada `all_working`, turn yang masuk Sabtu 10.00 dan dibalas Senin 09.05 berjeda 5 menit, bukan dua hari; libur nasional belum dikecualikan, jadi tanggal merah masih dihitung sebagai hari kerja. Default `all_flat` mempertahankan angka versi sebelumnya. Daftar `unanswered/list` tidak terpengaruh `response_mode` — isinya selalu semua turn.
+Mode berlaku untuk **seluruh** angka response di respons yang sama — `inbound_turn_count`, `replied_turn_count`, `unanswered_*`, median, p90, dan `within_target_*` — supaya satu payload tidak pernah mencampur dua definisi. Pada `all_working`, turn yang masuk Sabtu 10.00 dan dibalas Senin 09.05 berjeda 5 menit, bukan dua hari; libur nasional belum dikecualikan, jadi tanggal merah masih dihitung sebagai hari kerja. Default `all_flat` mempertahankan angka versi sebelumnya. Daftar `unanswered` tidak terpengaruh `response_mode` — isinya selalu semua turn.
 
 ## Endpoints
 
@@ -434,7 +434,7 @@ Daftar stage diambil dari `wa_lead_stages` milik tenant, jadi isi dan jumlahnya 
 | 404 | `NOT_FOUND` | `tenant not found` | `tenant_id` tidak ada di tabel tenants |
 | 500 | `INTERNAL_SERVER_ERROR` | `an unexpected error occurred` | kegagalan DB atau `CLIENT_SECRET` belum di-set |
 
-### `POST {base_url}/api/v1/stats/unanswered/list`
+### `POST {base_url}/api/v1/stats/unanswered`
 
 Mengembalikan daftar percakapan yang punya pesan masuk tanpa balasan sama sekali, diurutkan dari yang paling lama menunggu.
 
@@ -512,7 +512,7 @@ Mengembalikan daftar percakapan yang punya pesan masuk tanpa balasan sama sekali
 | 404 | `NOT_FOUND` | `tenant not found` | `tenant_id` tidak ada di tabel tenants |
 | 500 | `INTERNAL_SERVER_ERROR` | `an unexpected error occurred` | kegagalan DB atau `CLIENT_SECRET` belum di-set |
 
-### `POST {base_url}/api/v1/stats/needs-action/list`
+### `POST {base_url}/api/v1/stats/needs-action`
 
 Mengembalikan seluruh percakapan yang `brand_name`-nya sudah terisi — daftar brand deal yang sedang berjalan, diurutkan dari yang paling lama tidak ada aktivitas.
 
@@ -596,4 +596,4 @@ Dua elemen dashboard pada dokumen evaluasi masih belum punya sumber data di sche
 | Lost reason | Kolom alasan saat percakapan ditutup |
 | Cycle time inbound → closed | Timestamp saat stage closed tercapai |
 
-Funnel `Inbound → Qualified → Rate card → Nego → Closed` sudah dilayani `POST /stats/lead-status` lewat stage bawaan `cold` → `qualified` → `rate_card_sent` → `negotiation` → `closed` di `wa_lead_stages`; tenant lain boleh memakai stage berbeda. Estimasi leakage (Rp) bisa dirakit dari `total_project_value` per stage pada endpoint yang sama, digabung dengan `project_value` pada `POST /stats/unanswered/list` dan `POST /stats/needs-action/list`.
+Funnel `Inbound → Qualified → Rate card → Nego → Closed` sudah dilayani `POST /stats/lead-status` lewat stage bawaan `cold` → `qualified` → `rate_card_sent` → `negotiation` → `closed` di `wa_lead_stages`; tenant lain boleh memakai stage berbeda. Estimasi leakage (Rp) bisa dirakit dari `total_project_value` per stage pada endpoint yang sama, digabung dengan `project_value` pada `POST /stats/unanswered` dan `POST /stats/needs-action`.

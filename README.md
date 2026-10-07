@@ -82,7 +82,11 @@ Menambah module baru: bikin folder di `app/modules/`, lalu daftarkan di `create_
 | `POST` | `/api/v1/auth/logout` | dashboard TRC | `Bearer <JWT>` |
 | `GET` | `/api/v1/webhook/whatsapp/callback/{app_id}` | Meta (verifikasi webhook) | `hub.verify_token` |
 | `POST` | `/api/v1/webhook/whatsapp/callback/{app_id}` | Meta (event pesan/status) | `X-Hub-Signature-256` |
+| `POST` | `/api/v1/whatsapp/conversations` | dashboard TRC | `Bearer <JWT>` |
+| `POST` | `/api/v1/whatsapp/chats` | dashboard TRC | `Bearer <JWT>` |
 | `POST` | `/api/v1/stats/*` | dashboard TRC | `Bearer CLIENT_SECRET` |
+
+Rincian endpoint WhatsApp dan webhook ada di [docs/api/whatsapp.md](docs/api/whatsapp.md).
 
 ## Setup
 
@@ -95,7 +99,7 @@ cp .env.example .env
 # wajib: DATABASE_URL (kredensial Meta ada di tabel meta_apps, bukan env)
 # untuk attachment: SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
 # untuk stats + login: CLIENT_SECRET
-# untuk login dashboard: JWT_SECRET
+# untuk login dashboard dan daftar WhatsApp: JWT_SECRET
 
 # 3. Jalankan server
 uv run dev          # http://localhost:$APP_PORT  (reload)

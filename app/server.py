@@ -29,7 +29,7 @@ from app.modules.whatsapp.repository import (
     WaWebhookEventRepository,
 )
 from app.modules.whatsapp.routes import register_whatsapp_routes
-from app.modules.whatsapp.service import WhatsAppWebhookService
+from app.modules.whatsapp.service import WhatsAppListService, WhatsAppWebhookService
 from app.shared.http import close_http_client, http_client
 from app.shared.response import ApiError, api_error_handler, error
 from app.shared.storage import SupabaseStorage
@@ -60,6 +60,15 @@ def build_whatsapp_service(session: AsyncSession) -> WhatsAppWebhookService:
 
 def build_webhook_events(session: AsyncSession) -> WaWebhookEventRepository:
     return WaWebhookEventRepository(session)
+
+
+def build_whatsapp_list_service(session: AsyncSession) -> WhatsAppListService:
+    return WhatsAppListService(
+        auth=build_auth_service(session),
+        tenants=TenantRepository(session),
+        conversations=WaConversationRepository(session),
+        chats=WaChatRepository(session),
+    )
 
 
 # Hidup selama proses; pekerjaannya sendiri ada di Postgres, bukan di memori.
@@ -105,7 +114,9 @@ def create_app() -> FastAPI:
 
     api = APIRouter(prefix="/api/v1")
     register_auth_routes(api, build_auth_service)
-    register_whatsapp_routes(api, build_webhook_events, webhook_drainer)
+    register_whatsapp_routes(
+        api, build_webhook_events, webhook_drainer, build_whatsapp_list_service
+    )
     register_stat_routes(api, build_stat_service)
     app.include_router(api)
 

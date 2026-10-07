@@ -3,19 +3,24 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import session_scope
+from app.db.session import get_session, session_scope
+from app.modules.auth.routes import bearer_token
 from app.modules.meta.repository import MetaAppRepository
 from app.modules.whatsapp.drain import WebhookEventDrainer
 from app.modules.whatsapp.repository import WaWebhookEventRepository
+from app.modules.whatsapp.schema import ChatListRequest, ConversationListRequest
+from app.modules.whatsapp.service import WhatsAppListService
+from app.shared.response import success
 from app.shared.security import verify_meta_signature, verify_meta_token
 
 logger = logging.getLogger(__name__)
 
 EventsFactory = Callable[[AsyncSession], WaWebhookEventRepository]
+ListServiceFactory = Callable[[AsyncSession], WhatsAppListService]
 
 WA_OBJECT = "whatsapp_business_account"
 
@@ -38,7 +43,10 @@ async def resolve_app_credentials(app_id: str) -> AppCredentials | None:
 
 
 def register_whatsapp_routes(
-    rg: APIRouter, build_events: EventsFactory, drainer: WebhookEventDrainer
+    rg: APIRouter,
+    build_events: EventsFactory,
+    drainer: WebhookEventDrainer,
+    build_list_service: ListServiceFactory,
 ) -> None:
     router = APIRouter(prefix="/webhook/whatsapp", tags=["webhook:whatsapp-meta"])
 
@@ -103,3 +111,28 @@ def register_whatsapp_routes(
         return Response(status_code=200)
 
     rg.include_router(router)
+
+    list_router = APIRouter(prefix="/whatsapp", tags=["whatsapp"])
+
+    def list_service(session: AsyncSession = Depends(get_session)) -> WhatsAppListService:
+        return build_list_service(session)
+
+    @list_router.post("/conversations")
+    async def list_conversations(
+        req: ConversationListRequest,
+        token: str = Depends(bearer_token),
+        svc: WhatsAppListService = Depends(list_service),
+    ) -> Response:
+        return success(
+            200, "conversations retrieved successfully", await svc.conversations(req, token)
+        )
+
+    @list_router.post("/chats")
+    async def list_chats(
+        req: ChatListRequest,
+        token: str = Depends(bearer_token),
+        svc: WhatsAppListService = Depends(list_service),
+    ) -> Response:
+        return success(200, "chats retrieved successfully", await svc.chats(req, token))
+
+    rg.include_router(list_router)

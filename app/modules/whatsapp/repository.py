@@ -26,6 +26,29 @@ class WaConversationRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def find_by_id(self, conv_id: str) -> WaConversation | None:
+        return await self._session.get(WaConversation, conv_id)
+
+    async def count_by_tenant(self, tenant_id: str) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(WaConversation)
+            .where(WaConversation.tenant_id == tenant_id)
+        )
+        return (await self._session.execute(stmt)).scalar_one()
+
+    async def list_by_tenant(
+        self, *, tenant_id: str, limit: int, skip: int
+    ) -> list[WaConversation]:
+        stmt = (
+            select(WaConversation)
+            .where(WaConversation.tenant_id == tenant_id)
+            .order_by(WaConversation.created_at.desc(), WaConversation.id.desc())
+            .limit(limit)
+            .offset(skip)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
     async def find_or_create(
         self, *, tenant_id: str, full_name: str, phone_number: str
     ) -> WaConversation:
@@ -68,6 +91,20 @@ class WaConversationRepository:
 class WaChatRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def count_by_conversation(self, conv_id: str) -> int:
+        stmt = select(func.count()).select_from(WaChat).where(WaChat.conv_id == conv_id)
+        return (await self._session.execute(stmt)).scalar_one()
+
+    async def list_by_conversation(self, *, conv_id: str, limit: int, skip: int) -> list[WaChat]:
+        stmt = (
+            select(WaChat)
+            .where(WaChat.conv_id == conv_id)
+            .order_by(WaChat.created_at, WaChat.id)
+            .limit(limit)
+            .offset(skip)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
 
     async def find_by_wam_id(self, wam_id: str, conv_id: str | None = None) -> WaChat | None:
         stmt = select(WaChat).where(WaChat.wam_id == wam_id)

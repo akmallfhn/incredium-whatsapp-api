@@ -50,13 +50,13 @@ def register_stat_routes(rg: APIRouter, build_service: ServiceFactory) -> None:
     async def lead_status(req: StatRequest, svc: StatService = Depends(service)) -> Response:
         return success(200, "lead status retrieved successfully", await svc.lead_status(req))
 
-    @router.post("/unanswered/list")
+    @router.post("/unanswered")
     async def unanswered(req: ListRequest, svc: StatService = Depends(service)) -> Response:
         return success(
             200, "unanswered conversations retrieved successfully", await svc.unanswered(req)
         )
 
-    @router.post("/needs-action/list")
+    @router.post("/needs-action")
     async def needs_action(req: BrandListRequest, svc: StatService = Depends(service)) -> Response:
         return success(
             200, "needs action conversations retrieved successfully", await svc.needs_action(req)

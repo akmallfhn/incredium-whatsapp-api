@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # Meta WhatsApp Cloud API: app secret & verify token per App ada di tabel meta_apps.
     graph_api_version: str = "v25.0"
 
-    # Bearer token yang wajib dikirim client dashboard ke endpoint /api/v1/stats.
+    # Bearer token yang wajib dikirim dashboard ke stats dan login.
     client_secret: str = ""
 
     # Kunci tanda tangan JWT sesi login. Ganti nilainya = semua sesi berjalan mati.
