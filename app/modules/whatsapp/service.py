@@ -408,10 +408,15 @@ class WhatsAppListService:
                     "full_name": row.full_name,
                     "phone_number": row.phone_number,
                     "last_read_id": row.last_read_id,
+                    "last_message": last.message if last else None,
+                    "last_message_type": last.type if last else None,
+                    "last_message_direction": last.direction if last else None,
+                    "last_message_status": last.status if last else None,
+                    "last_message_at": last.created_at.isoformat() if last else None,
                     "created_at": row.created_at.isoformat(),
                     "updated_at": row.updated_at.isoformat(),
                 }
-                for row in rows
+                for row, last in rows
             ],
             "metapaging": pagination.meta(total, page, page_size),
         }

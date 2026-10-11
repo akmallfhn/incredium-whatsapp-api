@@ -42,6 +42,11 @@ Mengembalikan percakapan milik satu tenant, diurutkan dari `created_at` terbaru 
         "full_name": "Vicky",
         "phone_number": "6282213950021",
         "last_read_id": null,
+        "last_message": "Baik kak, kami cek dulu ya.",
+        "last_message_type": "text",
+        "last_message_direction": "outbound",
+        "last_message_status": "read",
+        "last_message_at": "2026-09-02T10:05:12+00:00",
         "created_at": "2026-09-02T10:00:08+00:00",
         "updated_at": "2026-09-02T10:00:08+00:00"
       }
@@ -55,6 +60,8 @@ Mengembalikan percakapan milik satu tenant, diurutkan dari `created_at` terbaru 
   }
 }
 ```
+
+Field `last_message_*` diambil dari chat terbaru percakapan itu menurut `created_at`. `last_message_type` memakai nilai `wac_type_enum` (`text`, `image`, `document`, `audio`, `template`, dan seterusnya), dan `last_message` bisa berupa string kosong untuk pesan nonteks tanpa caption. `last_message_status` bernilai `sent`, `delivered`, `read`, atau `failed` hanya untuk `last_message_direction` `outbound`, dan selalu `null` untuk `inbound`. Pesan `outbound` juga bisa `null` selama Meta belum mengirim status delivery untuknya. Percakapan tanpa chat sama sekali mengembalikan `null` di kelima field ini.
 
 `page` default `1`, `page_size` default `20` dan dibatasi maksimum `100`. Daftar kosong tetap mengembalikan `list: []` dan `total_page: 0`.
 

@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, case, delete, func, literal_column, or_, select, update
+from sqlalchemy import and_, case, delete, func, literal_column, or_, select, true, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.modules.tenant.entity import STATUS_ACTIVE
 from app.modules.whatsapp.entity import (
@@ -39,15 +40,25 @@ class WaConversationRepository:
 
     async def list_by_tenant(
         self, *, tenant_id: str, limit: int, skip: int
-    ) -> list[WaConversation]:
+    ) -> list[tuple[WaConversation, WaChat | None]]:
+        # LATERAL supaya chat terakhir dibaca dari index (conv_id, created_at DESC).
+        last_chat = (
+            select(WaChat)
+            .where(WaChat.conv_id == WaConversation.id)
+            .order_by(WaChat.created_at.desc(), WaChat.id.desc())
+            .limit(1)
+            .lateral("last_chat")
+        )
+        last = aliased(WaChat, last_chat)
         stmt = (
-            select(WaConversation)
+            select(WaConversation, last)
+            .outerjoin(last, true())
             .where(WaConversation.tenant_id == tenant_id)
             .order_by(WaConversation.created_at.desc(), WaConversation.id.desc())
             .limit(limit)
             .offset(skip)
         )
-        return list((await self._session.execute(stmt)).scalars().all())
+        return [(conv, chat) for conv, chat in (await self._session.execute(stmt)).all()]
 
     async def find_or_create(
         self, *, tenant_id: str, full_name: str, phone_number: str
