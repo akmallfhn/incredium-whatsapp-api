@@ -27,8 +27,8 @@ Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-se
 | `auth` | Email/password login issuing a 1-year HS256 JWT, session check, logout that deletes the session row in `tokens`, user roles and per-tenant access — see `docs/api/auth.md` |
 | `whatsapp` | Meta webhook at `/callback/{app_id}`: signature check against that App's secret, durable event intake in `wa_webhook_events`, then inbound messages, outbound echoes, delivery statuses, media upload to Supabase Storage. Also the JWT-guarded inbox: conversation and chat lists, mark-as-read, and sending text replies through the Graph API |
 | `stat` | Read-only aggregate endpoints for the dashboard — volume, response time, heatmap, lead funnel, unanswered, brand deals |
-| `tenant` | Tenant lookup by id |
-| `meta` | Meta App credentials (`meta_apps`) and per-tenant WABA connections (`meta_connections`); resolves a webhook's `phone_number_id` to its tenant and access token |
+| `tenant` | Tenant lookup by id, and `tenants/details`: a tenant plus each connection's live health checked against the Graph API — see `docs/api/tenant.md` |
+| `meta` | Meta App credentials (`meta_apps`) and per-tenant WABA connections (`meta_connections`); resolves a webhook's `phone_number_id` to its tenant and access token; `graph_client.py` reads phone number status and WABA webhook subscriptions |
 | `health` | Liveness and database reachability |
 | `shared` | Response envelope, `ApiError`, Bearer auth, pagination, shared httpx client, Meta signature verification, bcrypt/JWT primitives, Supabase Storage client |
 | `core`, `db` | Settings and the lazy async engine/session factory |

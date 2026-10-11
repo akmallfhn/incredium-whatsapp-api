@@ -86,9 +86,12 @@ Menambah module baru: bikin folder di `app/modules/`, lalu daftarkan di `create_
 | `POST` | `/api/v1/whatsapp/chats` | dashboard TRC | `Bearer <JWT>` |
 | `POST` | `/api/v1/whatsapp/update/conversation-as-read` | dashboard TRC | `Bearer <JWT>` |
 | `POST` | `/api/v1/whatsapp/send` | dashboard TRC | `Bearer <JWT>` |
+| `POST` | `/api/v1/tenants/details` | dashboard TRC | `Bearer <JWT>` |
 | `POST` | `/api/v1/stats/*` | dashboard TRC | `Bearer CLIENT_SECRET` |
 
 Rincian endpoint WhatsApp dan webhook ada di [docs/api/whatsapp.md](docs/api/whatsapp.md).
+
+Rincian endpoint tenant dan pengecekan koneksi Meta ada di [docs/api/tenant.md](docs/api/tenant.md).
 
 ## Setup
 

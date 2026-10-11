@@ -16,11 +16,14 @@ from app.modules.auth.repository import AuthRepository
 from app.modules.auth.routes import register_auth_routes
 from app.modules.auth.service import AuthService
 from app.modules.health.routes import register_health_routes
+from app.modules.meta.graph_client import MetaGraphClient
 from app.modules.meta.repository import MetaConnectionRepository
 from app.modules.stat.repository import StatRepository
 from app.modules.stat.routes import register_stat_routes
 from app.modules.stat.service import StatService
 from app.modules.tenant.repository import TenantRepository
+from app.modules.tenant.routes import register_tenant_routes
+from app.modules.tenant.service import TenantService
 from app.modules.whatsapp.drain import WebhookEventDrainer
 from app.modules.whatsapp.meta_client import MetaMediaClient, MetaMessageClient
 from app.modules.whatsapp.repository import (
@@ -80,6 +83,15 @@ webhook_drainer = WebhookEventDrainer(
 )
 
 
+def build_tenant_service(session: AsyncSession) -> TenantService:
+    return TenantService(
+        auth=build_auth_service(session),
+        tenants=TenantRepository(session),
+        connections=MetaConnectionRepository(session),
+        graph=MetaGraphClient(http_client(), settings.graph_api_version),
+    )
+
+
 def build_stat_service(session: AsyncSession) -> StatService:
     return StatService(stats=StatRepository(session), tenants=TenantRepository(session))
 
@@ -121,6 +133,7 @@ def create_app() -> FastAPI:
         api, build_webhook_events, webhook_drainer, build_whatsapp_inbox_service
     )
     register_stat_routes(api, build_stat_service)
+    register_tenant_routes(api, build_tenant_service)
     app.include_router(api)
 
     return app

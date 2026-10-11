@@ -35,6 +35,16 @@ class MetaConnectionRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def list_by_tenant(self, tenant_id: str) -> list[tuple[MetaConnection, str]]:
+        """Semua koneksi tenant, aktif maupun tidak, beserta app_id Meta-nya."""
+        stmt = (
+            select(MetaConnection, MetaApp.app_id)
+            .join(MetaApp, MetaApp.id == MetaConnection.meta_app_id)
+            .where(MetaConnection.tenant_id == tenant_id)
+            .order_by(MetaConnection.created_at)
+        )
+        return [(conn, app_id) for conn, app_id in (await self._session.execute(stmt)).all()]
+
     async def find_context_by_tenant_id(self, tenant_id: str) -> ConnectionContext | None:
         """Nomor pengirim pesan keluar; tenant dengan lebih dari satu nomor memakai yang tertua."""
         stmt = (
