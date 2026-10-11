@@ -241,11 +241,13 @@ class WhatsAppWebhookService:
 
             is_text = msg_type == "text"
             wam_id = echo.get("id", "")
+            sent_at = unix_to_datetime(echo.get("timestamp"))
             attachment = await self._resolve_attachment(ctx, msg_type, echo)
             try:
                 conv = await self._conversations.find_or_create(
                     tenant_id=ctx.tenant_id, full_name="", phone_number=echo.get("to", "")
                 )
+                # Meta tidak pernah mengirim status sent untuk pesan dari app; echo itulah buktinya.
                 await self._chats.upsert_message(
                     conv_id=conv.id,
                     wam_id=wam_id,
@@ -254,7 +256,8 @@ class WhatsAppWebhookService:
                     msg_type=msg_type,
                     message=echo.get("text", {}).get("body", "") if is_text else "",
                     attachment=attachment,
-                    created_at=unix_to_datetime(echo.get("timestamp")),
+                    created_at=sent_at,
+                    sent_at=sent_at,
                 )
                 await self._session.commit()
             except Exception:

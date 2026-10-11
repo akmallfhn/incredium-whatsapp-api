@@ -4,7 +4,7 @@ Endpoint ini membaca percakapan dan chat WhatsApp, menandai percakapan sudah dib
 
 ## `POST /api/v1/whatsapp/conversations`
 
-Mengembalikan percakapan milik satu tenant yang cocok dengan filter, diurutkan dari `created_at` terbaru dengan `id` sebagai pemecah waktu yang sama.
+Mengembalikan percakapan milik satu tenant yang cocok dengan filter, diurutkan seperti inbox WhatsApp: `last_message_at` terbaru di atas, dengan `id` sebagai pemecah waktu yang sama. Percakapan tanpa chat memakai `created_at`-nya sebagai pengganti.
 
 **Method:** `POST`
 
@@ -73,7 +73,7 @@ Mengembalikan percakapan milik satu tenant yang cocok dengan filter, diurutkan d
 }
 ```
 
-Field `last_message_*` diambil dari chat terbaru percakapan itu menurut `created_at`. `last_message_type` memakai nilai `wac_type_enum` (`text`, `image`, `document`, `audio`, `template`, dan seterusnya), dan `last_message` bisa berupa string kosong untuk pesan nonteks tanpa caption. `last_message_status` bernilai `sent`, `delivered`, `read`, atau `failed` hanya untuk `last_message_direction` `outbound`, dan selalu `null` untuk `inbound`. Pesan `outbound` juga bisa `null` selama Meta belum mengirim status delivery untuknya. Percakapan tanpa chat sama sekali mengembalikan `null` di kelima field ini.
+Field `last_message_*` diambil dari chat terbaru percakapan itu menurut `created_at`. `last_message_type` memakai nilai `wac_type_enum` (`text`, `image`, `document`, `audio`, `template`, dan seterusnya), dan `last_message` bisa berupa string kosong untuk pesan nonteks tanpa caption. `last_message_status` bernilai `sent`, `delivered`, `read`, atau `failed` hanya untuk `last_message_direction` `outbound`, dan selalu `null` untuk `inbound`. Pesan yang dikirim admin dari aplikasi WhatsApp Business langsung bernilai `sent` begitu echo-nya masuk, lalu naik ke `delivered` atau `read` kalau Meta mengirim statusnya; untuk sebagian pesan dari aplikasi, Meta tidak pernah mengirim status lanjutan sehingga tetap `sent`. Pesan dari `POST /api/v1/whatsapp/send` bisa `null` sampai status pertamanya datang. Percakapan tanpa chat sama sekali mengembalikan `null` di kelima field ini.
 
 `unread_count` menghitung chat `inbound` yang lebih baru dari chat `last_read_id`; kalau `last_read_id` masih `null`, semua chat `inbound` terhitung. `window_expired` bernilai `true` kalau chat `inbound` terakhir sudah 24 jam atau lebih, atau belum ada sama sekali. Selama `true`, Meta hanya menerima pesan template, jadi `POST /api/v1/whatsapp/send` akan menolak dengan `409`.
 
@@ -95,7 +95,7 @@ Field `last_message_*` diambil dari chat terbaru percakapan itu menurut `created
 
 ## `POST /api/v1/whatsapp/chats`
 
-Mengembalikan semua pesan dari satu percakapan, diurutkan dari `created_at` terlama dengan `id` sebagai pemecah waktu yang sama.
+Mengembalikan pesan dari satu percakapan, diurutkan dari `created_at` terbaru dengan `id` sebagai pemecah waktu yang sama, jadi `page` 1 selalu berisi pesan paling baru.
 
 **Method:** `POST`
 
@@ -156,7 +156,7 @@ Mengembalikan semua pesan dari satu percakapan, diurutkan dari `created_at` terl
 }
 ```
 
-`attachment` berisi metadata pesan nonteks dan bisa memuat `storage_url` setelah media berhasil diunggah. `status` serta waktu pengiriman, penerimaan, baca, dan gagal dapat bernilai `null`. Pagination sama dengan endpoint percakapan.
+`attachment` berisi metadata pesan nonteks dan bisa memuat `storage_url` setelah media berhasil diunggah. `status` serta waktu pengiriman, penerimaan, baca, dan gagal dapat bernilai `null`. Pagination sama dengan endpoint percakapan; `page` berikutnya berisi pesan yang lebih lama. Balik urutan `list` untuk menampilkannya dari atas ke bawah. Kalau ada pesan baru masuk di antara dua permintaan, isi halaman bergeser satu posisi, jadi hilangkan duplikat berdasarkan `id` saat menggabungkan halaman.
 
 **Errors**
 

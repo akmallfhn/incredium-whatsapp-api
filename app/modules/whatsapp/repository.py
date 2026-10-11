@@ -9,6 +9,7 @@ from sqlalchemy.orm import aliased
 
 from app.modules.tenant.entity import STATUS_ACTIVE
 from app.modules.whatsapp.entity import (
+    CHAT_STATUS_SENT,
     DIRECTION_INBOUND,
     DIRECTION_OUTBOUND,
     EVENT_STATUS_DONE,
@@ -130,7 +131,11 @@ class WaConversationRepository:
             .outerjoin(read_chat, read_chat.id == WaConversation.last_read_id)
             .outerjoin(last, true())
             .where(*_conversation_clauses(f))
-            .order_by(WaConversation.created_at.desc(), WaConversation.id.desc())
+            # Urutan inbox: percakapan tanpa chat memakai waktu dibuatnya sebagai pengganti.
+            .order_by(
+                func.coalesce(last.created_at, WaConversation.created_at).desc(),
+                WaConversation.id.desc(),
+            )
             .limit(limit)
             .offset(skip)
         )
@@ -208,7 +213,7 @@ class WaChatRepository:
         stmt = (
             select(WaChat)
             .where(WaChat.conv_id == conv_id)
-            .order_by(WaChat.created_at, WaChat.id)
+            .order_by(WaChat.created_at.desc(), WaChat.id.desc())
             .limit(limit)
             .offset(skip)
         )
@@ -259,8 +264,9 @@ class WaChatRepository:
         attachment: Any | None = None,
         reply_to_id: str | None = None,
         created_at: datetime | None = None,
+        sent_at: datetime | None = None,
     ) -> None:
-        """Isi pesan menang atas baris penampung yang dibuat status; kolom status tidak disentuh."""
+        """Isi pesan menang atas baris penampung yang dibuat status; status tidak pernah mundur."""
         values: dict[str, Any] = {
             "conv_id": conv_id,
             "wam_id": wam_id,
@@ -273,6 +279,9 @@ class WaChatRepository:
         }
         if created_at is not None:
             values["created_at"] = created_at
+        if sent_at is not None:
+            values["status"] = CHAT_STATUS_SENT
+            values["sent_at"] = sent_at
 
         stmt = pg_insert(WaChat).values(**values)
         # conv_id sengaja tidak ikut ditimpa supaya pesan tidak pindah percakapan.
@@ -282,6 +291,10 @@ class WaChatRepository:
         }
         if created_at is not None:
             set_["created_at"] = stmt.excluded.created_at
+        if sent_at is not None:
+            # COALESCE: delivered/read/failed yang sudah datang lebih dulu tidak diturunkan ke sent.
+            set_["status"] = func.coalesce(WaChat.status, stmt.excluded.status)
+            set_["sent_at"] = func.coalesce(WaChat.sent_at, stmt.excluded.sent_at)
         set_["updated_at"] = func.current_timestamp()
 
         await self._session.execute(
