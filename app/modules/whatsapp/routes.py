@@ -12,15 +12,20 @@ from app.modules.auth.routes import bearer_token
 from app.modules.meta.repository import MetaAppRepository
 from app.modules.whatsapp.drain import WebhookEventDrainer
 from app.modules.whatsapp.repository import WaWebhookEventRepository
-from app.modules.whatsapp.schema import ChatListRequest, ConversationListRequest
-from app.modules.whatsapp.service import WhatsAppListService
+from app.modules.whatsapp.schema import (
+    ChatListRequest,
+    ConversationAsReadRequest,
+    ConversationListRequest,
+    SendMessageRequest,
+)
+from app.modules.whatsapp.service import WhatsAppInboxService
 from app.shared.response import success
 from app.shared.security import verify_meta_signature, verify_meta_token
 
 logger = logging.getLogger(__name__)
 
 EventsFactory = Callable[[AsyncSession], WaWebhookEventRepository]
-ListServiceFactory = Callable[[AsyncSession], WhatsAppListService]
+InboxServiceFactory = Callable[[AsyncSession], WhatsAppInboxService]
 
 WA_OBJECT = "whatsapp_business_account"
 
@@ -46,7 +51,7 @@ def register_whatsapp_routes(
     rg: APIRouter,
     build_events: EventsFactory,
     drainer: WebhookEventDrainer,
-    build_list_service: ListServiceFactory,
+    build_inbox_service: InboxServiceFactory,
 ) -> None:
     router = APIRouter(prefix="/webhook/whatsapp", tags=["webhook:whatsapp-meta"])
 
@@ -112,27 +117,43 @@ def register_whatsapp_routes(
 
     rg.include_router(router)
 
-    list_router = APIRouter(prefix="/whatsapp", tags=["whatsapp"])
+    inbox_router = APIRouter(prefix="/whatsapp", tags=["whatsapp"])
 
-    def list_service(session: AsyncSession = Depends(get_session)) -> WhatsAppListService:
-        return build_list_service(session)
+    def inbox_service(session: AsyncSession = Depends(get_session)) -> WhatsAppInboxService:
+        return build_inbox_service(session)
 
-    @list_router.post("/conversations")
+    @inbox_router.post("/conversations")
     async def list_conversations(
         req: ConversationListRequest,
         token: str = Depends(bearer_token),
-        svc: WhatsAppListService = Depends(list_service),
+        svc: WhatsAppInboxService = Depends(inbox_service),
     ) -> Response:
         return success(
             200, "conversations retrieved successfully", await svc.conversations(req, token)
         )
 
-    @list_router.post("/chats")
+    @inbox_router.post("/chats")
     async def list_chats(
         req: ChatListRequest,
         token: str = Depends(bearer_token),
-        svc: WhatsAppListService = Depends(list_service),
+        svc: WhatsAppInboxService = Depends(inbox_service),
     ) -> Response:
         return success(200, "chats retrieved successfully", await svc.chats(req, token))
 
-    rg.include_router(list_router)
+    @inbox_router.post("/update/conversation-as-read")
+    async def conversation_as_read(
+        req: ConversationAsReadRequest,
+        token: str = Depends(bearer_token),
+        svc: WhatsAppInboxService = Depends(inbox_service),
+    ) -> Response:
+        return success(200, "conversation marked as read", await svc.mark_as_read(req, token))
+
+    @inbox_router.post("/send")
+    async def send_message(
+        req: SendMessageRequest,
+        token: str = Depends(bearer_token),
+        svc: WhatsAppInboxService = Depends(inbox_service),
+    ) -> Response:
+        return success(201, "message sent successfully", await svc.send(req, token))
+
+    rg.include_router(inbox_router)

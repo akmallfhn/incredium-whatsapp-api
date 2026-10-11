@@ -84,6 +84,8 @@ Menambah module baru: bikin folder di `app/modules/`, lalu daftarkan di `create_
 | `POST` | `/api/v1/webhook/whatsapp/callback/{app_id}` | Meta (event pesan/status) | `X-Hub-Signature-256` |
 | `POST` | `/api/v1/whatsapp/conversations` | dashboard TRC | `Bearer <JWT>` |
 | `POST` | `/api/v1/whatsapp/chats` | dashboard TRC | `Bearer <JWT>` |
+| `POST` | `/api/v1/whatsapp/update/conversation-as-read` | dashboard TRC | `Bearer <JWT>` |
+| `POST` | `/api/v1/whatsapp/send` | dashboard TRC | `Bearer <JWT>` |
 | `POST` | `/api/v1/stats/*` | dashboard TRC | `Bearer CLIENT_SECRET` |
 
 Rincian endpoint WhatsApp dan webhook ada di [docs/api/whatsapp.md](docs/api/whatsapp.md).

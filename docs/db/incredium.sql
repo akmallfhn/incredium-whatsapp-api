@@ -281,9 +281,9 @@ CREATE INDEX meta_connections_meta_app_id_idx  ON meta_connections (meta_app_id)
 -- WhatsApp chat
 
 CREATE INDEX wa_conversations_tenant_id_idx   ON wa_conversations (tenant_id);
--- Chat terakhir per percakapan cukup dibaca dari ujung index ini.
+CREATE INDEX wa_conversations_full_name_trgm_idx  ON wa_conversations USING gin (full_name gin_trgm_ops);
+CREATE INDEX wa_chats_message_trgm_idx           ON wa_chats USING gin (message gin_trgm_ops);
 CREATE INDEX wa_chats_conv_id_created_at_idx  ON wa_chats (conv_id, created_at DESC);
--- Dedup attachment: file dengan sha256 yang sama memakai ulang storage_url yang sudah ada.
 CREATE INDEX wa_chats_attachment_sha256_idx   ON wa_chats ((attachment ->> 'sha256'))
   WHERE (attachment ->> 'storage_url') IS NOT NULL;
 

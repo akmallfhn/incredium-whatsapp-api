@@ -22,14 +22,14 @@ from app.modules.stat.routes import register_stat_routes
 from app.modules.stat.service import StatService
 from app.modules.tenant.repository import TenantRepository
 from app.modules.whatsapp.drain import WebhookEventDrainer
-from app.modules.whatsapp.meta_client import MetaMediaClient
+from app.modules.whatsapp.meta_client import MetaMediaClient, MetaMessageClient
 from app.modules.whatsapp.repository import (
     WaChatRepository,
     WaConversationRepository,
     WaWebhookEventRepository,
 )
 from app.modules.whatsapp.routes import register_whatsapp_routes
-from app.modules.whatsapp.service import WhatsAppListService, WhatsAppWebhookService
+from app.modules.whatsapp.service import WhatsAppInboxService, WhatsAppWebhookService
 from app.shared.http import close_http_client, http_client
 from app.shared.response import ApiError, api_error_handler, error
 from app.shared.storage import SupabaseStorage
@@ -62,12 +62,15 @@ def build_webhook_events(session: AsyncSession) -> WaWebhookEventRepository:
     return WaWebhookEventRepository(session)
 
 
-def build_whatsapp_list_service(session: AsyncSession) -> WhatsAppListService:
-    return WhatsAppListService(
+def build_whatsapp_inbox_service(session: AsyncSession) -> WhatsAppInboxService:
+    return WhatsAppInboxService(
+        session,
         auth=build_auth_service(session),
         tenants=TenantRepository(session),
+        connections=MetaConnectionRepository(session),
         conversations=WaConversationRepository(session),
         chats=WaChatRepository(session),
+        messages=MetaMessageClient(http_client(), settings.graph_api_version),
     )
 
 
@@ -115,7 +118,7 @@ def create_app() -> FastAPI:
     api = APIRouter(prefix="/api/v1")
     register_auth_routes(api, build_auth_service)
     register_whatsapp_routes(
-        api, build_webhook_events, webhook_drainer, build_whatsapp_list_service
+        api, build_webhook_events, webhook_drainer, build_whatsapp_inbox_service
     )
     register_stat_routes(api, build_stat_service)
     app.include_router(api)

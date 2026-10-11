@@ -1,9 +1,9 @@
-"""Pemrosesan webhook Meta dan layanan baca percakapan serta chat WhatsApp."""
+"""Pemrosesan webhook Meta dan layanan inbox percakapan serta chat WhatsApp."""
 
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -22,10 +22,23 @@ from app.modules.whatsapp.entity import (
     DIRECTION_OUTBOUND,
     SENDER_TYPE_ADMIN,
     SENDER_TYPE_USER,
+    WaChat,
+    WaConversation,
 )
-from app.modules.whatsapp.meta_client import MetaMediaClient
-from app.modules.whatsapp.repository import WaChatRepository, WaConversationRepository
-from app.modules.whatsapp.schema import ChatListRequest, ConversationListRequest, WAWebhookBody
+from app.modules.whatsapp.meta_client import MetaMediaClient, MetaMessageClient, MetaSendError
+from app.modules.whatsapp.repository import (
+    ConversationFilter,
+    ConversationRow,
+    WaChatRepository,
+    WaConversationRepository,
+)
+from app.modules.whatsapp.schema import (
+    ChatListRequest,
+    ConversationAsReadRequest,
+    ConversationListRequest,
+    SendMessageRequest,
+    WAWebhookBody,
+)
 from app.shared import pagination
 from app.shared.pdf import shrink_pdf
 from app.shared.response import ApiError
@@ -37,6 +50,10 @@ SUPPORTED_MESSAGE_TYPES = {"audio", "contacts", "document", "image", "sticker", 
 # Tipe pesan yang attachment-nya beneran file (didownload dari Meta & diupload ke Storage).
 MEDIA_MESSAGE_TYPES = {"audio", "document", "image", "sticker", "video"}
 PDF_MIME = "application/pdf"
+
+# Di luar jendela ini Meta hanya menerima pesan template.
+CUSTOMER_SERVICE_WINDOW = timedelta(hours=24)
+MAX_TEXT_LENGTH = 4096
 
 HANDLED_FIELDS = ("messages", "smb_message_echoes")
 # Field yang tidak membawa pesan tapi mengabarkan akun/koneksi berubah; dicatat lebih keras.
@@ -372,19 +389,27 @@ class WhatsAppWebhookService:
         return shrunk
 
 
-class WhatsAppListService:
+class WhatsAppInboxService:
+    """Layanan inbox dashboard: baca percakapan dan chat, tandai dibaca, kirim balasan."""
+
     def __init__(
         self,
+        session: AsyncSession,
         *,
         auth: AuthService,
         tenants: TenantRepository,
+        connections: MetaConnectionRepository,
         conversations: WaConversationRepository,
         chats: WaChatRepository,
+        messages: MetaMessageClient,
     ) -> None:
+        self._session = session
         self._auth = auth
         self._tenants = tenants
+        self._connections = connections
         self._conversations = conversations
         self._chats = chats
+        self._messages = messages
 
     async def conversations(self, req: ConversationListRequest, token: str) -> dict[str, Any]:
         user = await self._auth.authenticate(token)
@@ -395,66 +420,150 @@ class WhatsAppListService:
         if await self._tenants.find_by_id(req.tenant_id) is None:
             raise ApiError(404, "tenant not found")
 
-        page, page_size = pagination.normalize(req.page, req.page_size)
-        total = await self._conversations.count_by_tenant(req.tenant_id)
-        rows = await self._conversations.list_by_tenant(
-            tenant_id=req.tenant_id, limit=page_size, skip=pagination.offset(page, page_size)
+        f = ConversationFilter(
+            tenant_id=req.tenant_id,
+            search=(req.search or "").strip() or None,
+            stage_id=(req.stage_id or "").strip() or None,
+            mode=req.mode,
+            by_handler="handler_id" in req.model_fields_set,
+            handler_id=str(req.handler_id) if req.handler_id else None,
         )
+        page, page_size = pagination.normalize(req.page, req.page_size)
+        total = await self._conversations.count_filtered(f)
+        rows = await self._conversations.list_filtered(
+            f, limit=page_size, skip=pagination.offset(page, page_size)
+        )
+        now = datetime.now(timezone.utc)
         return {
-            "list": [
-                {
-                    "id": row.id,
-                    "tenant_id": row.tenant_id,
-                    "full_name": row.full_name,
-                    "phone_number": row.phone_number,
-                    "last_read_id": row.last_read_id,
-                    "last_message": last.message if last else None,
-                    "last_message_type": last.type if last else None,
-                    "last_message_direction": last.direction if last else None,
-                    "last_message_status": last.status if last else None,
-                    "last_message_at": last.created_at.isoformat() if last else None,
-                    "created_at": row.created_at.isoformat(),
-                    "updated_at": row.updated_at.isoformat(),
-                }
-                for row, last in rows
-            ],
+            "list": [_conversation_payload(row, now) for row in rows],
             "metapaging": pagination.meta(total, page, page_size),
         }
 
     async def chats(self, req: ChatListRequest, token: str) -> dict[str, Any]:
-        user = await self._auth.authenticate(token)
-        if not req.conv_id.strip():
-            raise ApiError(400, "conv_id is required")
-        conv = await self._conversations.find_by_id(req.conv_id)
-        if conv is None or not _can_access_tenant(user, conv.tenant_id):
-            raise ApiError(404, "conversation not found")
+        conv = await self._accessible_conversation(req.conv_id, token)
 
         page, page_size = pagination.normalize(req.page, req.page_size)
-        total = await self._chats.count_by_conversation(req.conv_id)
+        total = await self._chats.count_by_conversation(conv.id)
         rows = await self._chats.list_by_conversation(
-            conv_id=req.conv_id, limit=page_size, skip=pagination.offset(page, page_size)
+            conv_id=conv.id, limit=page_size, skip=pagination.offset(page, page_size)
         )
         return {
-            "list": [
-                {
-                    "id": row.id,
-                    "conv_id": row.conv_id,
-                    "wam_id": row.wam_id,
-                    "direction": row.direction,
-                    "sender_type": row.sender_type,
-                    "reply_to_id": row.reply_to_id,
-                    "type": row.type,
-                    "message": row.message,
-                    "attachment": row.attachment,
-                    "status": row.status,
-                    "sent_at": row.sent_at.isoformat() if row.sent_at else None,
-                    "delivered_at": row.delivered_at.isoformat() if row.delivered_at else None,
-                    "read_at": row.read_at.isoformat() if row.read_at else None,
-                    "failed_at": row.failed_at.isoformat() if row.failed_at else None,
-                    "created_at": row.created_at.isoformat(),
-                    "updated_at": row.updated_at.isoformat(),
-                }
-                for row in rows
-            ],
+            "list": [_chat_payload(row) for row in rows],
             "metapaging": pagination.meta(total, page, page_size),
         }
+
+    async def mark_as_read(self, req: ConversationAsReadRequest, token: str) -> dict[str, Any]:
+        conv = await self._accessible_conversation(req.conv_id, token)
+        last_read_id = await self._conversations.mark_as_read(conv.id)
+        await self._session.commit()
+        return {"id": conv.id, "last_read_id": last_read_id, "unread_count": 0}
+
+    async def send(self, req: SendMessageRequest, token: str) -> dict[str, Any]:
+        conv = await self._accessible_conversation(req.conv_id, token)
+        body = req.message.strip()
+        if not body:
+            raise ApiError(400, "message is required")
+        if len(body) > MAX_TEXT_LENGTH:
+            raise ApiError(400, f"message exceeds {MAX_TEXT_LENGTH} characters")
+
+        reply_to_wam_id = None
+        if req.reply_to_id:
+            reply_to = await self._chats.find_in_conversation(
+                chat_id=req.reply_to_id, conv_id=conv.id
+            )
+            if reply_to is None:
+                raise ApiError(404, "reply message not found")
+            reply_to_wam_id = reply_to.wam_id
+
+        # Di luar jendela 24 jam Meta tetap membalas 200 lalu menggagalkan pesannya lewat webhook.
+        last_inbound_at = await self._chats.last_inbound_at(conv.id)
+        if _window_expired(last_inbound_at, datetime.now(timezone.utc)):
+            raise ApiError(409, "customer service window has expired")
+
+        ctx = await self._connections.find_context_by_tenant_id(conv.tenant_id)
+        if ctx is None or not ctx.access_token:
+            raise ApiError(409, "tenant has no active whatsapp connection")
+
+        try:
+            wam_id = await self._messages.send_text(
+                access_token=ctx.access_token,
+                phone_number_id=ctx.phone_number_id,
+                to=conv.phone_number,
+                body=body,
+                reply_to_wam_id=reply_to_wam_id,
+            )
+        except MetaSendError as exc:
+            logger.warning(f"wa-meta send: gagal kirim ke conv={conv.id}: {exc}")
+            raise ApiError(500, f"failed to send message: {exc}") from exc
+
+        # Upsert karena webhook status dari Meta bisa lebih dulu membuat baris penampungnya.
+        await self._chats.upsert_message(
+            conv_id=conv.id,
+            wam_id=wam_id,
+            direction=DIRECTION_OUTBOUND,
+            sender_type=SENDER_TYPE_ADMIN,
+            msg_type="text",
+            message=body,
+            reply_to_id=req.reply_to_id,
+        )
+        await self._session.commit()
+
+        chat = await self._chats.find_by_wam_id(wam_id)
+        if chat is None:
+            raise ApiError(500, "an unexpected error occurred")
+        return _chat_payload(chat)
+
+    async def _accessible_conversation(self, conv_id: str, token: str) -> WaConversation:
+        """Percakapan di luar akses tenant pengguna dijawab 404, bukan 403, supaya tidak bocor."""
+        user = await self._auth.authenticate(token)
+        if not conv_id.strip():
+            raise ApiError(400, "conv_id is required")
+        conv = await self._conversations.find_by_id(conv_id)
+        if conv is None or not _can_access_tenant(user, conv.tenant_id):
+            raise ApiError(404, "conversation not found")
+        return conv
+
+
+def _window_expired(last_inbound_at: datetime | None, now: datetime) -> bool:
+    return last_inbound_at is None or now - last_inbound_at >= CUSTOMER_SERVICE_WINDOW
+
+
+def _conversation_payload(row: ConversationRow, now: datetime) -> dict[str, Any]:
+    conv, last = row.conversation, row.last_chat
+    return {
+        "id": conv.id,
+        "tenant_id": conv.tenant_id,
+        "full_name": conv.full_name,
+        "phone_number": conv.phone_number,
+        "last_read_id": conv.last_read_id,
+        "unread_count": row.unread_count,
+        "window_expired": _window_expired(row.last_inbound_at, now),
+        "last_message": last.message if last else None,
+        "last_message_type": last.type if last else None,
+        "last_message_direction": last.direction if last else None,
+        "last_message_status": last.status if last else None,
+        "last_message_at": last.created_at.isoformat() if last else None,
+        "created_at": conv.created_at.isoformat(),
+        "updated_at": conv.updated_at.isoformat(),
+    }
+
+
+def _chat_payload(row: WaChat) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "conv_id": row.conv_id,
+        "wam_id": row.wam_id,
+        "direction": row.direction,
+        "sender_type": row.sender_type,
+        "reply_to_id": row.reply_to_id,
+        "type": row.type,
+        "message": row.message,
+        "attachment": row.attachment,
+        "status": row.status,
+        "sent_at": row.sent_at.isoformat() if row.sent_at else None,
+        "delivered_at": row.delivered_at.isoformat() if row.delivered_at else None,
+        "read_at": row.read_at.isoformat() if row.read_at else None,
+        "failed_at": row.failed_at.isoformat() if row.failed_at else None,
+        "created_at": row.created_at.isoformat(),
+        "updated_at": row.updated_at.isoformat(),
+    }

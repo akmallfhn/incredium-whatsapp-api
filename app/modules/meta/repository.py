@@ -1,6 +1,7 @@
 from dataclasses import dataclass
+from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import Row, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.meta.entity import MetaApp, MetaConnection
@@ -34,6 +35,26 @@ class MetaConnectionRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def find_context_by_tenant_id(self, tenant_id: str) -> ConnectionContext | None:
+        """Nomor pengirim pesan keluar; tenant dengan lebih dari satu nomor memakai yang tertua."""
+        stmt = (
+            select(
+                MetaConnection.tenant_id,
+                Tenant.slug,
+                MetaConnection.wa_phone_number_id,
+                MetaConnection.access_token,
+            )
+            .join(Tenant, Tenant.id == MetaConnection.tenant_id)
+            .where(
+                MetaConnection.tenant_id == tenant_id,
+                MetaConnection.status == STATUS_ACTIVE,
+                Tenant.status == STATUS_ACTIVE,
+            )
+            .order_by(MetaConnection.created_at)
+            .limit(1)
+        )
+        return _to_context((await self._session.execute(stmt)).first())
+
     async def find_context_by_phone_number_id(
         self, phone_number_id: str
     ) -> ConnectionContext | None:
@@ -53,12 +74,15 @@ class MetaConnectionRepository:
             )
             .limit(1)
         )
-        row = (await self._session.execute(stmt)).first()
-        if row is None:
-            return None
-        return ConnectionContext(
-            tenant_id=row.tenant_id,
-            tenant_slug=row.slug or row.tenant_id,
-            phone_number_id=row.wa_phone_number_id,
-            access_token=row.access_token or "",
-        )
+        return _to_context((await self._session.execute(stmt)).first())
+
+
+def _to_context(row: Row[Any] | None) -> ConnectionContext | None:
+    if row is None:
+        return None
+    return ConnectionContext(
+        tenant_id=row.tenant_id,
+        tenant_slug=row.slug or row.tenant_id,
+        phone_number_id=row.wa_phone_number_id,
+        access_token=row.access_token or "",
+    )

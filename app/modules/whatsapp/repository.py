@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -8,6 +9,7 @@ from sqlalchemy.orm import aliased
 
 from app.modules.tenant.entity import STATUS_ACTIVE
 from app.modules.whatsapp.entity import (
+    DIRECTION_INBOUND,
     DIRECTION_OUTBOUND,
     EVENT_STATUS_DONE,
     EVENT_STATUS_FAILED,
@@ -22,6 +24,59 @@ from app.modules.whatsapp.entity import (
     WaWebhookEvent,
 )
 
+LIKE_ESCAPE = "\\"
+
+
+@dataclass(frozen=True)
+class ConversationFilter:
+    tenant_id: str
+    search: str | None = None
+    stage_id: str | None = None
+    mode: str | None = None
+    # False berarti handler tidak difilter; True dengan handler_id None berarti belum ada handler.
+    by_handler: bool = False
+    handler_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ConversationRow:
+    conversation: WaConversation
+    last_chat: WaChat | None
+    last_inbound_at: datetime | None
+    unread_count: int
+
+
+def _conversation_clauses(f: ConversationFilter) -> list[Any]:
+    """Filter daftar percakapan; query pemakainya wajib LEFT JOIN wa_leads."""
+    clauses: list[Any] = [WaConversation.tenant_id == f.tenant_id]
+    if f.stage_id is not None:
+        clauses.append(WaLead.stage_id == f.stage_id)
+    if f.mode is not None:
+        clauses.append(WaLead.mode == f.mode)
+    if f.by_handler:
+        clauses.append(
+            WaLead.handler_id.is_(None)
+            if f.handler_id is None
+            else WaLead.handler_id == f.handler_id
+        )
+    if f.search:
+        escaped = f.search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
+        clauses.append(
+            or_(
+                WaConversation.full_name.ilike(pattern, escape=LIKE_ESCAPE),
+                WaConversation.phone_number.ilike(pattern, escape=LIKE_ESCAPE),
+                WaLead.brand_name.ilike(pattern, escape=LIKE_ESCAPE),
+                select(WaChat.id)
+                .where(
+                    WaChat.conv_id == WaConversation.id,
+                    WaChat.message.ilike(pattern, escape=LIKE_ESCAPE),
+                )
+                .exists(),
+            )
+        )
+    return clauses
+
 
 class WaConversationRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -30,17 +85,18 @@ class WaConversationRepository:
     async def find_by_id(self, conv_id: str) -> WaConversation | None:
         return await self._session.get(WaConversation, conv_id)
 
-    async def count_by_tenant(self, tenant_id: str) -> int:
+    async def count_filtered(self, f: ConversationFilter) -> int:
         stmt = (
             select(func.count())
             .select_from(WaConversation)
-            .where(WaConversation.tenant_id == tenant_id)
+            .outerjoin(WaLead, WaLead.conv_id == WaConversation.id)
+            .where(*_conversation_clauses(f))
         )
         return (await self._session.execute(stmt)).scalar_one()
 
-    async def list_by_tenant(
-        self, *, tenant_id: str, limit: int, skip: int
-    ) -> list[tuple[WaConversation, WaChat | None]]:
+    async def list_filtered(
+        self, f: ConversationFilter, *, limit: int, skip: int
+    ) -> list[ConversationRow]:
         # LATERAL supaya chat terakhir dibaca dari index (conv_id, created_at DESC).
         last_chat = (
             select(WaChat)
@@ -50,15 +106,56 @@ class WaConversationRepository:
             .lateral("last_chat")
         )
         last = aliased(WaChat, last_chat)
+        read_chat = aliased(WaChat)
+        last_inbound_at = (
+            select(func.max(WaChat.created_at))
+            .where(WaChat.conv_id == WaConversation.id, WaChat.direction == DIRECTION_INBOUND)
+            .correlate(WaConversation)
+            .scalar_subquery()
+        )
+        unread_count = (
+            select(func.count())
+            .select_from(WaChat)
+            .where(
+                WaChat.conv_id == WaConversation.id,
+                WaChat.direction == DIRECTION_INBOUND,
+                or_(read_chat.id.is_(None), WaChat.created_at > read_chat.created_at),
+            )
+            .correlate(WaConversation, read_chat)
+            .scalar_subquery()
+        )
         stmt = (
-            select(WaConversation, last)
+            select(WaConversation, last, last_inbound_at, unread_count)
+            .outerjoin(WaLead, WaLead.conv_id == WaConversation.id)
+            .outerjoin(read_chat, read_chat.id == WaConversation.last_read_id)
             .outerjoin(last, true())
-            .where(WaConversation.tenant_id == tenant_id)
+            .where(*_conversation_clauses(f))
             .order_by(WaConversation.created_at.desc(), WaConversation.id.desc())
             .limit(limit)
             .offset(skip)
         )
-        return [(conv, chat) for conv, chat in (await self._session.execute(stmt)).all()]
+        return [
+            ConversationRow(conv, chat, inbound_at, unread)
+            for conv, chat, inbound_at, unread in (await self._session.execute(stmt)).all()
+        ]
+
+    async def mark_as_read(self, conv_id: str) -> str | None:
+        """Tandai sampai chat terbaru; percakapan tanpa chat tetap null."""
+        latest = (
+            select(WaChat.id)
+            .where(WaChat.conv_id == conv_id)
+            .order_by(WaChat.created_at.desc(), WaChat.id.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
+        stmt = (
+            update(WaConversation)
+            .where(WaConversation.id == conv_id)
+            .values(last_read_id=latest)
+            .returning(WaConversation.last_read_id)
+            .execution_options(synchronize_session=False)
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none()
 
     async def find_or_create(
         self, *, tenant_id: str, full_name: str, phone_number: str
@@ -116,6 +213,16 @@ class WaChatRepository:
             .offset(skip)
         )
         return list((await self._session.execute(stmt)).scalars().all())
+
+    async def find_in_conversation(self, *, chat_id: str, conv_id: str) -> WaChat | None:
+        stmt = select(WaChat).where(WaChat.id == chat_id, WaChat.conv_id == conv_id).limit(1)
+        return (await self._session.execute(stmt)).scalars().first()
+
+    async def last_inbound_at(self, conv_id: str) -> datetime | None:
+        stmt = select(func.max(WaChat.created_at)).where(
+            WaChat.conv_id == conv_id, WaChat.direction == DIRECTION_INBOUND
+        )
+        return (await self._session.execute(stmt)).scalar_one()
 
     async def find_by_wam_id(self, wam_id: str, conv_id: str | None = None) -> WaChat | None:
         stmt = select(WaChat).where(WaChat.wam_id == wam_id)
