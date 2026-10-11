@@ -31,7 +31,7 @@ def register_auth_routes(rg: APIRouter, build_service: ServiceFactory) -> None:
     async def login(req: LoginRequest, svc: AuthService = Depends(service)) -> Response:
         return success(200, "login successful", await svc.login(req))
 
-    @router.get("/check-session")
+    @router.post("/check-session")
     async def check_session(
         token: str = Depends(bearer_token), svc: AuthService = Depends(service)
     ) -> Response:

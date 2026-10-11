@@ -74,11 +74,11 @@ Menambah module baru: bikin folder di `app/modules/`, lalu daftarkan di `create_
 
 | Method | Path | Dipanggil oleh | Auth |
 |---|---|---|---|
-| `GET` | `/health` | siapa saja | - |
-| `GET` | `/health/db` | monitoring | - |
-| `GET` | `/health/webhook` | monitoring | - |
+| `POST` | `/health` | siapa saja | - |
+| `POST` | `/health/db` | monitoring | - |
+| `POST` | `/health/webhook` | monitoring | - |
 | `POST` | `/api/v1/auth/login` | dashboard TRC | `Bearer CLIENT_SECRET` |
-| `GET` | `/api/v1/auth/check-session` | dashboard TRC | `Bearer <JWT>` |
+| `POST` | `/api/v1/auth/check-session` | dashboard TRC | `Bearer <JWT>` |
 | `POST` | `/api/v1/auth/logout` | dashboard TRC | `Bearer <JWT>` |
 | `GET` | `/api/v1/webhook/whatsapp/callback/{app_id}` | Meta (verifikasi webhook) | `hub.verify_token` |
 | `POST` | `/api/v1/webhook/whatsapp/callback/{app_id}` | Meta (event pesan/status) | `X-Hub-Signature-256` |
@@ -115,7 +115,7 @@ dengan fallback `APP_PORT` untuk lokal.
 (`?schema=public`, `?pgbouncer=true`, `?sslmode=require`) dinormalisasi otomatis ke asyncpg.
 Kalau pakai connection pooler Supabase (port 6543), prepared statement cache dimatikan sendiri.
 
-Cek koneksi database: `curl http://localhost:8000/health/db`.
+Cek koneksi database: `curl -X POST http://localhost:8000/health/db`.
 
 ## Menghubungkan Webhook Meta
 
@@ -141,7 +141,7 @@ kosong, verifikasi signature **dilewati** (hanya untuk dev lokal).
 ## Auth
 
 `POST /auth/login` menerima email + password dan dijaga `CLIENT_SECRET`; balasannya JWT
-HS256 berumur `JWT_TTL_DAYS` hari (365, konstanta di `app/core/constants.py`). `GET /auth/check-session` memvalidasi JWT dan
+HS256 berumur `JWT_TTL_DAYS` hari (365, konstanta di `app/core/constants.py`). `POST /auth/check-session` memvalidasi JWT dan
 mengembalikan profil pemiliknya. `POST /auth/logout` dijaga JWT itu sendiri dan menghapus
 barisnya di `tokens`, jadi token yang sama langsung ditolak.
 

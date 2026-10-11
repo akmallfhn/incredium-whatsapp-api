@@ -4,7 +4,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.entity import Token, User, UserAccess
-from app.modules.tenant.entity import STATUS_ACTIVE
+from app.modules.tenant.entity import STATUS_ACTIVE, Tenant
 
 
 class AuthRepository:
@@ -24,10 +24,11 @@ class AuthRepository:
         stmt = select(User).where(User.id == user_id, User.status == STATUS_ACTIVE).limit(1)
         return (await self._session.execute(stmt)).scalars().first()
 
-    async def tenant_ids_for(self, user_id: str) -> list[str]:
+    async def active_tenants_for(self, user_id: str) -> list[Tenant]:
         stmt = (
-            select(UserAccess.tenant_id)
-            .where(UserAccess.user_id == user_id)
+            select(Tenant)
+            .join(UserAccess, UserAccess.tenant_id == Tenant.id)
+            .where(UserAccess.user_id == user_id, Tenant.status == STATUS_ACTIVE)
             .order_by(UserAccess.created_at)
         )
         return list((await self._session.execute(stmt)).scalars().all())

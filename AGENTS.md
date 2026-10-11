@@ -36,6 +36,7 @@ Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-se
 ## Conventions — follow these exactly, they're load-bearing
 
 - **Wiring lives only in `app/server.py`.** Modules expose `register_<module>_routes(router, build_service)`; the factory that constructs the service is passed in. Never instantiate a repository or service inside a route handler.
+- **All non-webhook endpoints use `POST`**, including auth and health. The Meta webhook is the only exception: its verification callback must accept `GET`, and its event callback accepts `POST`.
 - **Response envelope:** always `success(code, message, data)` / `error(code, message)` from `app.shared.response`. Never return a bare dict or `JSONResponse` from a client-facing endpoint. The webhook routes are the one exception — Meta dictates their response shape (empty `200`, plain-text challenge on verification).
 - **Errors:** raise `ApiError(code, message)` from the service layer; `api_error_handler` renders it in the same envelope. Request validation failures are normalized to `400` with `invalid request: <field>` by `validation_error_handler` — don't let the default 422 through.
 - **Stats endpoints are `POST` with a JSON body**, authenticated with a static `Bearer $CLIENT_SECRET`. No path params, no query params.

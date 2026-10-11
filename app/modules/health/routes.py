@@ -14,16 +14,16 @@ EventsFactory = Callable[[AsyncSession], WaWebhookEventRepository]
 def register_health_routes(rg: APIRouter, build_events: EventsFactory) -> None:
     router = APIRouter(tags=["health"])
 
-    @router.get("/health")
+    @router.post("/health")
     async def health() -> dict:
         return {"status": "ok"}
 
-    @router.get("/health/db")
+    @router.post("/health/db")
     async def health_db(session: AsyncSession = Depends(get_session)) -> dict:
         await session.execute(text("SELECT 1"))
         return {"status": "ok", "database": "reachable"}
 
-    @router.get("/health/webhook")
+    @router.post("/health/webhook")
     async def health_webhook(session: AsyncSession = Depends(get_session)) -> dict:
         """Kapan event terakhir masuk dan berapa yang belum selesai; dasar alarm webhook mati."""
         last_event_at, backlog = await build_events(session).backlog()

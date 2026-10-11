@@ -2,7 +2,7 @@
 
 Login email + password untuk dashboard TRC, penerbitan JWT, pemeriksaan sesi, dan logout. Endpoint ini yang menentukan siapa penggunanya dan tenant mana saja yang boleh ia lihat — tapi belum ada endpoint untuk membuat atau mengubah user: baris `users`, `password_hash`, dan `users_access` masih diisi manual lewat SQL.
 
-Ada dua jenis kredensial di API ini dan keduanya tidak saling menggantikan. `CLIENT_SECRET` adalah Bearer token statis milik aplikasi dashboard, dipakai `login` dan seluruh endpoint `stats/*`. JWT adalah token per pengguna hasil login, dipakai `check-session`, `logout`, dan daftar `whatsapp/*`. Endpoint `stats/*` **belum** memakai JWT — scope tenant di sana masih dikirim eksplisit lewat `tenant_id`, dan `tenant_ids` dari login dipakai UI untuk menentukan tenant mana yang boleh dipilih. Daftar WhatsApp memeriksa JWT serta akses tenant dari `users_access` pada setiap permintaan.
+Ada dua jenis kredensial di API ini dan keduanya tidak saling menggantikan. `CLIENT_SECRET` adalah Bearer token statis milik aplikasi dashboard, dipakai `login` dan seluruh endpoint `stats/*`. JWT adalah token per pengguna hasil login, dipakai `check-session`, `logout`, dan daftar `whatsapp/*`. Endpoint `stats/*` **belum** memakai JWT — scope tenant di sana masih dikirim eksplisit lewat `tenant_id`, dan array `tenants` dari login dipakai UI untuk menentukan tenant mana yang boleh dipilih. Daftar WhatsApp memeriksa JWT serta akses tenant dari `users_access` pada setiap permintaan.
 
 JWT ditandatangani HS256 dengan `JWT_SECRET` dan berumur `JWT_TTL_DAYS` hari (365, konstanta di `app/core/constants.py`). Umur sepanjang itu hanya aman kalau token bisa dicabut, jadi tanda tangan yang sah saja tidak cukup: setiap pemakaian JWT dicocokkan ke baris `tokens` yang masih hidup. Logout menghapus baris itu, dan token yang sama langsung ditolak walau belum kedaluwarsa. Mengganti `JWT_SECRET` mematikan semua sesi sekaligus.
 
@@ -24,7 +24,7 @@ Bentuk yang sama dipakai `login`, `check-session`, dan sebagai sumber data profi
 | `avatar` | string \| null | URL foto, boleh kosong |
 | `role` | string | `Super Admin`, `Administrator`, atau `Member` |
 | `status` | string | selalu `active` di respons; user `inactive` tidak bisa login |
-| `tenant_ids` | string[] | tenant yang boleh diakses, urut waktu pemberian akses. Bisa kosong |
+| `tenants` | object[] | Tenant aktif yang boleh diakses. Bisa kosong. Setiap item berisi `id`, `name`, dan `slug`. |
 
 ## Endpoints
 
@@ -73,7 +73,13 @@ Domain special-use seperti `.test`, `.local`, dan `.invalid` ditolak validator s
       "avatar": null,
       "role": "Super Admin",
       "status": "active",
-      "tenant_ids": ["8yuPA4qUjqC3OfizucQoH"]
+      "tenants": [
+        {
+          "id": "8yuPA4qUjqC3OfizucQoH",
+          "name": "Incredium",
+          "slug": "incredium"
+        }
+      ]
     }
   }
 }
@@ -86,13 +92,13 @@ Domain special-use seperti `.test`, `.local`, dan `.invalid` ditolak validator s
 | `401` | `invalid email or password` — email tidak terdaftar, password salah, atau user nonaktif |
 | `500` | `an unexpected error occurred` — `JWT_SECRET` kosong di server |
 
-### `GET {base_url}/api/v1/auth/check-session`
+### `POST {base_url}/api/v1/auth/check-session`
 
 Memastikan JWT masih berlaku dan mengembalikan profil pemiliknya. Dipakai saat halaman dimuat ulang, untuk memutuskan menampilkan dashboard atau melempar ke halaman login.
 
-Datanya dibaca ulang dari database tiap panggilan, bukan dari isi JWT — jadi perubahan peran, avatar, atau akses tenant langsung terbaca tanpa perlu login ulang. Sebaliknya, user yang dinonaktifkan langsung kehilangan sesinya.
+Datanya dibaca ulang dari database tiap panggilan, bukan dari isi JWT — jadi perubahan peran, avatar, nama atau slug tenant, dan akses tenant langsung terbaca tanpa perlu login ulang. Tenant yang dinonaktifkan tidak dikembalikan, dan user yang dinonaktifkan langsung kehilangan sesinya.
 
-**Method:** `GET`
+**Method:** `POST`
 
 **Authorization:** `Bearer <jwt>`
 
@@ -113,7 +119,13 @@ Datanya dibaca ulang dari database tiap panggilan, bukan dari isi JWT — jadi p
     "avatar": null,
     "role": "Super Admin",
     "status": "active",
-    "tenant_ids": ["8yuPA4qUjqC3OfizucQoH"]
+    "tenants": [
+      {
+        "id": "8yuPA4qUjqC3OfizucQoH",
+        "name": "Incredium",
+        "slug": "incredium"
+      }
+    ]
   }
 }
 ```

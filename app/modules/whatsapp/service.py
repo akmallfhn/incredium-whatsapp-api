@@ -43,6 +43,10 @@ HANDLED_FIELDS = ("messages", "smb_message_echoes")
 CRITICAL_FIELDS = ("account_update", "security", "phone_number_quality_update")
 
 
+def _can_access_tenant(user: dict[str, Any], tenant_id: str) -> bool:
+    return any(tenant["id"] == tenant_id for tenant in user["tenants"])
+
+
 @dataclass(frozen=True)
 class ProcessOutcome:
     """Hasil satu event: berapa change yang dikerjakan dan field apa saja yang dilewati."""
@@ -386,7 +390,7 @@ class WhatsAppListService:
         user = await self._auth.authenticate(token)
         if not req.tenant_id.strip():
             raise ApiError(400, "tenant_id is required")
-        if req.tenant_id not in user["tenant_ids"]:
+        if not _can_access_tenant(user, req.tenant_id):
             raise ApiError(403, "tenant access denied")
         if await self._tenants.find_by_id(req.tenant_id) is None:
             raise ApiError(404, "tenant not found")
@@ -417,7 +421,7 @@ class WhatsAppListService:
         if not req.conv_id.strip():
             raise ApiError(400, "conv_id is required")
         conv = await self._conversations.find_by_id(req.conv_id)
-        if conv is None or conv.tenant_id not in user["tenant_ids"]:
+        if conv is None or not _can_access_tenant(user, conv.tenant_id):
             raise ApiError(404, "conversation not found")
 
         page, page_size = pagination.normalize(req.page, req.page_size)

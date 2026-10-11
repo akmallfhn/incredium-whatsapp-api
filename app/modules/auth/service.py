@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.modules.auth.entity import User
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.schema import LoginRequest
+from app.modules.tenant.entity import Tenant
 from app.shared.response import ApiError
 from app.shared.security import decode_jwt, encode_jwt, hash_password, verify_password
 
@@ -59,12 +60,12 @@ class AuthService:
         await self._repo.create_token(user_id=user.id, token=token, expires_at=expires_at)
         await self._session.commit()
 
-        tenant_ids = await self._repo.tenant_ids_for(user.id)
+        tenants = await self._repo.active_tenants_for(user.id)
         return {
             "token": token,
             "token_type": "Bearer",
             "expires_at": expires_at.isoformat(),
-            "user": _user_payload(user, tenant_ids),
+            "user": _user_payload(user, tenants),
         }
 
     async def logout(self, token: str) -> dict[str, Any]:
@@ -90,11 +91,11 @@ class AuthService:
         if user is None:
             raise ApiError(401, INVALID_TOKEN)
 
-        tenant_ids = await self._repo.tenant_ids_for(user.id)
-        return _user_payload(user, tenant_ids)
+        tenants = await self._repo.active_tenants_for(user.id)
+        return _user_payload(user, tenants)
 
 
-def _user_payload(user: User, tenant_ids: list[str]) -> dict[str, Any]:
+def _user_payload(user: User, tenants: list[Tenant]) -> dict[str, Any]:
     return {
         "id": user.id,
         "full_name": user.full_name,
@@ -102,5 +103,7 @@ def _user_payload(user: User, tenant_ids: list[str]) -> dict[str, Any]:
         "avatar": user.avatar,
         "role": user.role,
         "status": user.status,
-        "tenant_ids": tenant_ids,
+        "tenants": [
+            {"id": tenant.id, "name": tenant.name, "slug": tenant.slug} for tenant in tenants
+        ],
     }
