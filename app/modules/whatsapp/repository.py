@@ -2,12 +2,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, case, delete, func, literal_column, or_, select, true, update
+from sqlalchemy import and_, case, cast, delete, func, literal_column, or_, select, true, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app.modules.tenant.entity import STATUS_ACTIVE
+from app.modules.tenant.entity import STATUS_ACTIVE, Tenant
 from app.modules.whatsapp.entity import (
     CHAT_STATUS_SENT,
     DIRECTION_INBOUND,
@@ -17,7 +17,11 @@ from app.modules.whatsapp.entity import (
     EVENT_STATUS_IGNORED,
     EVENT_STATUS_PENDING,
     EVENT_STATUS_PROCESSING,
+    MODE_AI,
+    MODE_ENUM,
+    MODE_HUMAN,
     SENDER_TYPE_ADMIN,
+    SENDER_TYPE_AGENT,
     WaChat,
     WaConversation,
     WaLead,
@@ -194,10 +198,27 @@ class WaConversationRepository:
             .limit(1)
             .scalar_subquery()
         )
+        has_agent = (
+            select(Tenant.active_agent_id)
+            .where(Tenant.id == tenant_id)
+            .scalar_subquery()
+            .is_not(None)
+        )
         await self._session.execute(
             pg_insert(WaLead)
-            .values(conv_id=conv_id, stage_id=first_stage)
+            .values(
+                conv_id=conv_id,
+                stage_id=first_stage,
+                mode=cast(case((has_agent, MODE_AI), else_=MODE_HUMAN), MODE_ENUM),
+            )
             .on_conflict_do_nothing(index_elements=[WaLead.conv_id])
+        )
+
+    async def set_human_mode(self, conv_id: str) -> None:
+        await self._session.execute(
+            update(WaLead)
+            .where(WaLead.conv_id == conv_id, WaLead.mode == MODE_AI)
+            .values(mode=MODE_HUMAN, updated_at=func.current_timestamp())
         )
 
 
@@ -265,7 +286,8 @@ class WaChatRepository:
         reply_to_id: str | None = None,
         created_at: datetime | None = None,
         sent_at: datetime | None = None,
-    ) -> None:
+        agent_id: str | None = None,
+    ) -> tuple[str, bool]:
         """Isi pesan menang atas baris penampung yang dibuat status; status tidak pernah mundur."""
         values: dict[str, Any] = {
             "conv_id": conv_id,
@@ -276,6 +298,7 @@ class WaChatRepository:
             "message": message,
             "attachment": attachment,
             "reply_to_id": reply_to_id,
+            "agent_id": agent_id,
         }
         if created_at is not None:
             values["created_at"] = created_at
@@ -287,8 +310,13 @@ class WaChatRepository:
         # conv_id sengaja tidak ikut ditimpa supaya pesan tidak pindah percakapan.
         set_: dict[str, Any] = {
             col: stmt.excluded[col]
-            for col in ("direction", "sender_type", "type", "message", "attachment", "reply_to_id")
+            for col in ("direction", "type", "message", "attachment", "reply_to_id")
         }
+        set_["sender_type"] = case(
+            (WaChat.sender_type == SENDER_TYPE_AGENT, WaChat.sender_type),
+            else_=stmt.excluded.sender_type,
+        )
+        set_["agent_id"] = func.coalesce(WaChat.agent_id, stmt.excluded.agent_id)
         if created_at is not None:
             set_["created_at"] = stmt.excluded.created_at
         if sent_at is not None:
@@ -297,9 +325,13 @@ class WaChatRepository:
             set_["sent_at"] = func.coalesce(WaChat.sent_at, stmt.excluded.sent_at)
         set_["updated_at"] = func.current_timestamp()
 
-        await self._session.execute(
-            stmt.on_conflict_do_update(index_elements=[WaChat.wam_id], set_=set_)
+        result = await self._session.execute(
+            stmt.on_conflict_do_update(index_elements=[WaChat.wam_id], set_=set_).returning(
+                WaChat.id, literal_column("(xmax = 0)")
+            )
         )
+        chat_id, inserted = result.one()
+        return chat_id, bool(inserted)
 
     async def upsert_status(
         self,

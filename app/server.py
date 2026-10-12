@@ -12,6 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import constants
 from app.core.config import settings
 from app.db.session import dispose_engine, init_engine
+from app.modules.agents.repository import AgentRepository
+from app.modules.agents.routes import register_agent_routes
+from app.modules.agents.service import AgentService
+from app.modules.agents.whatsapp_reply.repository import AgentReplyRepository
+from app.modules.agents.whatsapp_reply.service import AgentReplyWorker
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.routes import register_auth_routes
 from app.modules.auth.service import AuthService
@@ -33,6 +38,7 @@ from app.modules.whatsapp.repository import (
 )
 from app.modules.whatsapp.routes import register_whatsapp_routes
 from app.modules.whatsapp.service import WhatsAppInboxService, WhatsAppWebhookService
+from app.shared.agent_cache import AgentCache
 from app.shared.http import close_http_client, http_client
 from app.shared.response import ApiError, api_error_handler, error
 from app.shared.storage import SupabaseStorage
@@ -42,6 +48,15 @@ logger = logging.getLogger(__name__)
 
 def build_auth_service(session: AsyncSession) -> AuthService:
     return AuthService(session, repo=AuthRepository(session))
+
+
+def build_agent_service(session: AsyncSession) -> AgentService:
+    return AgentService(
+        session,
+        auth=build_auth_service(session),
+        repo=AgentRepository(session),
+        cache=AgentCache(http_client()),
+    )
 
 
 def build_whatsapp_service(session: AsyncSession) -> WhatsAppWebhookService:
@@ -58,6 +73,8 @@ def build_whatsapp_service(session: AsyncSession) -> WhatsAppWebhookService:
             service_role_key=settings.supabase_service_role_key,
             bucket=constants.SUPABASE_BUCKET,
         ),
+        replies=AgentReplyRepository(session),
+        cache=AgentCache(client),
     )
 
 
@@ -74,6 +91,7 @@ def build_whatsapp_inbox_service(session: AsyncSession) -> WhatsAppInboxService:
         conversations=WaConversationRepository(session),
         chats=WaChatRepository(session),
         messages=MetaMessageClient(http_client(), settings.graph_api_version),
+        cache=AgentCache(http_client()),
     )
 
 
@@ -109,12 +127,20 @@ async def lifespan(app: FastAPI):
 
     # Menyelesaikan event yang tertinggal karena proses sebelumnya mati sebelum selesai.
     sweeper = asyncio.create_task(webhook_drainer.run_forever())
+    agent_worker = AgentReplyWorker(
+        messages=MetaMessageClient(http_client(), settings.graph_api_version),
+        cache=AgentCache(http_client()),
+    )
+    agent_sweeper = asyncio.create_task(agent_worker.run_forever())
 
     yield
 
     sweeper.cancel()
+    agent_sweeper.cancel()
     with suppress(asyncio.CancelledError):
         await sweeper
+    with suppress(asyncio.CancelledError):
+        await agent_sweeper
     await close_http_client()
     await dispose_engine()
 
@@ -134,6 +160,7 @@ def create_app() -> FastAPI:
     )
     register_stat_routes(api, build_stat_service)
     register_tenant_routes(api, build_tenant_service)
+    register_agent_routes(api, build_agent_service)
     app.include_router(api)
 
     return app

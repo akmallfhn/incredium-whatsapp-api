@@ -22,6 +22,7 @@ class Tenant(Base):
     name: Mapped[str] = mapped_column(String)
     slug: Mapped[str] = mapped_column(String)
     status: Mapped[str] = mapped_column(STATUS_ENUM, server_default=text("'active'"))
+    active_agent_id: Mapped[str | None] = mapped_column(CHAR(21))
     created_at: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP")

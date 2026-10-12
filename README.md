@@ -5,7 +5,7 @@ mencatatnya ke **Postgres multitenant** di Supabase.
 
 Dibangun dengan **FastAPI + SQLAlchemy (async) + asyncpg**.
 
-DDL referensinya ada di `docs/db/incredium.sql`; SQLAlchemy tidak pernah menggenerate schema.
+DDL referensinya ada di `docs/db/incredium-ddl.sql`; SQLAlchemy tidak pernah menggenerate schema.
 Tabel yang dipakai: `tenants`, `wa_webhook_events`, `wa_conversations`, `wa_chats`.
 
 ## Alur

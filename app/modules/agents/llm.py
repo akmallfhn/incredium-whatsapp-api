@@ -92,3 +92,39 @@ def build_llm(
         tools=tools,
         structured_output=structured_output,
     )
+
+
+def build_agent_llm(
+    *,
+    provider_name: str,
+    model_name: str,
+    max_tokens: int,
+    timeout: float = DEFAULT_TIMEOUT,
+    structured_output: Any | None = None,
+) -> Runnable:
+    """Pilih provider dan model dari katalog agent; rahasia tetap dari environment."""
+    if provider_name == "openai":
+        from langchain_openai import ChatOpenAI
+
+        if not settings.openai_api_key:
+            raise RuntimeError("OPENAI_API_KEY is empty")
+        llm = ChatOpenAI(
+            model=model_name,
+            api_key=settings.openai_api_key,
+            max_tokens=max_tokens,
+            timeout=timeout,
+        )
+    elif provider_name == "deepseek":
+        from langchain_deepseek import ChatDeepSeek
+
+        if not settings.deepseek_api_key:
+            raise RuntimeError("DEEPSEEK_API_KEY is empty")
+        llm = ChatDeepSeek(
+            model=model_name,
+            api_key=settings.deepseek_api_key,
+            max_tokens=max_tokens,
+            timeout=timeout,
+        )
+    else:
+        raise RuntimeError(f"unsupported LLM provider: {provider_name}")
+    return _prepare(llm, tools=None, structured_output=structured_output)

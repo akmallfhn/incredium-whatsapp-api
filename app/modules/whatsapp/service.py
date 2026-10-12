@@ -10,6 +10,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import constants
+from app.modules.agents.whatsapp_reply.repository import AgentReplyRepository
 from app.modules.auth.service import AuthService
 from app.modules.meta.repository import ConnectionContext, MetaConnectionRepository
 from app.modules.tenant.repository import TenantRepository
@@ -21,6 +22,7 @@ from app.modules.whatsapp.entity import (
     DIRECTION_INBOUND,
     DIRECTION_OUTBOUND,
     SENDER_TYPE_ADMIN,
+    SENDER_TYPE_AGENT,
     SENDER_TYPE_USER,
     WaChat,
     WaConversation,
@@ -40,6 +42,7 @@ from app.modules.whatsapp.schema import (
     WAWebhookBody,
 )
 from app.shared import pagination
+from app.shared.agent_cache import AgentCache
 from app.shared.pdf import shrink_pdf
 from app.shared.response import ApiError
 from app.shared.storage import SupabaseStorage
@@ -105,6 +108,8 @@ class WhatsAppWebhookService:
         chats: WaChatRepository,
         media: MetaMediaClient,
         storage: SupabaseStorage,
+        replies: AgentReplyRepository,
+        cache: AgentCache,
     ) -> None:
         self._session = session
         self._connections = connections
@@ -112,6 +117,8 @@ class WhatsAppWebhookService:
         self._chats = chats
         self._media = media
         self._storage = storage
+        self._replies = replies
+        self._cache = cache
 
     async def process(self, payload: WAWebhookBody) -> ProcessOutcome:
         """Kerjakan satu payload; pemanggil memakai hasilnya untuk menandai statusnya."""
@@ -184,6 +191,7 @@ class WhatsAppWebhookService:
             try:
                 await self._append_inbound_chat(
                     tenant_id=ctx.tenant_id,
+                    wa_phone_number_id=ctx.phone_number_id,
                     full_name=full_name,
                     phone_number=msg.get("from", ""),
                     wam_id=wam_id,
@@ -202,6 +210,7 @@ class WhatsAppWebhookService:
         self,
         *,
         tenant_id: str,
+        wa_phone_number_id: str,
         full_name: str,
         phone_number: str,
         wam_id: str,
@@ -220,7 +229,7 @@ class WhatsAppWebhookService:
             replied_to = await self._chats.find_by_wam_id(context_wam_id, conv_id=conv.id)
             reply_to_id = replied_to.id if replied_to else None
 
-        await self._chats.upsert_message(
+        chat_id, inserted = await self._chats.upsert_message(
             conv_id=conv.id,
             wam_id=wam_id,
             direction=DIRECTION_INBOUND,
@@ -231,6 +240,10 @@ class WhatsAppWebhookService:
             reply_to_id=reply_to_id,
             created_at=unix_to_datetime(sent_at_unix),
         )
+        if inserted:
+            await self._replies.enqueue(
+                conv_id=conv.id, chat_id=chat_id, wa_phone_number_id=wa_phone_number_id
+            )
 
     # --- Echo pesan yang dikirim staff dari WhatsApp Business App (coexistence) ---
     async def _handle_echoes(self, ctx: ConnectionContext, value: dict[str, Any]) -> None:
@@ -247,6 +260,7 @@ class WhatsAppWebhookService:
                 conv = await self._conversations.find_or_create(
                     tenant_id=ctx.tenant_id, full_name="", phone_number=echo.get("to", "")
                 )
+                await self._replies.lock_for_echo(conv.id)
                 # Meta tidak pernah mengirim status sent untuk pesan dari app; echo itulah buktinya.
                 await self._chats.upsert_message(
                     conv_id=conv.id,
@@ -259,7 +273,13 @@ class WhatsAppWebhookService:
                     created_at=sent_at,
                     sent_at=sent_at,
                 )
+                existing = await self._chats.find_by_wam_id(wam_id, conv_id=conv.id)
+                staff_echo = existing is not None and existing.sender_type != SENDER_TYPE_AGENT
+                if staff_echo:
+                    await self._conversations.set_human_mode(conv.id)
                 await self._session.commit()
+                if staff_echo:
+                    await self._cache.delete_mode(conv.id)
             except Exception:
                 await self._session.rollback()
                 logger.exception(f"wa-meta webhook: failed to store echo {wam_id}")
@@ -405,6 +425,7 @@ class WhatsAppInboxService:
         conversations: WaConversationRepository,
         chats: WaChatRepository,
         messages: MetaMessageClient,
+        cache: AgentCache,
     ) -> None:
         self._session = session
         self._auth = auth
@@ -413,6 +434,7 @@ class WhatsAppInboxService:
         self._conversations = conversations
         self._chats = chats
         self._messages = messages
+        self._cache = cache
 
     async def conversations(self, req: ConversationListRequest, token: str) -> dict[str, Any]:
         user = await self._auth.authenticate(token)
@@ -486,6 +508,10 @@ class WhatsAppInboxService:
         ctx = await self._connections.find_context_by_tenant_id(conv.tenant_id)
         if ctx is None or not ctx.access_token:
             raise ApiError(409, "tenant has no active whatsapp connection")
+
+        await self._conversations.set_human_mode(conv.id)
+        await self._session.commit()
+        await self._cache.delete_mode(conv.id)
 
         try:
             wam_id = await self._messages.send_text(

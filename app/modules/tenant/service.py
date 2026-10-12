@@ -47,6 +47,7 @@ class TenantService:
             "name": tenant.name,
             "slug": tenant.slug,
             "status": tenant.status,
+            "active_agent_id": tenant.active_agent_id,
             "connections": list(connections),
         }
 

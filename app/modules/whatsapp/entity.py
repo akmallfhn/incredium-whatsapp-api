@@ -13,6 +13,7 @@ DIRECTION_OUTBOUND = "outbound"
 
 SENDER_TYPE_USER = "user"
 SENDER_TYPE_ADMIN = "admin"
+SENDER_TYPE_AGENT = "agent"
 
 MODE_AI = "ai"
 MODE_HUMAN = "human"
@@ -54,7 +55,11 @@ DIRECTION_ENUM = ENUM(
     DIRECTION_INBOUND, DIRECTION_OUTBOUND, name="wac_direction_enum", create_type=False
 )
 SENDER_TYPE_ENUM = ENUM(
-    SENDER_TYPE_USER, SENDER_TYPE_ADMIN, name="wac_sender_type_enum", create_type=False
+    SENDER_TYPE_USER,
+    SENDER_TYPE_ADMIN,
+    SENDER_TYPE_AGENT,
+    name="wac_sender_type_enum",
+    create_type=False,
 )
 CHAT_TYPE_ENUM = ENUM(*CHAT_TYPES, name="wac_type_enum", create_type=False)
 WEBHOOK_EVENT_STATUS_ENUM = ENUM(
@@ -146,6 +151,7 @@ class WaChat(Base):
     wam_id: Mapped[str] = mapped_column(String)
     direction: Mapped[str] = mapped_column(DIRECTION_ENUM)
     sender_type: Mapped[str] = mapped_column(SENDER_TYPE_ENUM)
+    agent_id: Mapped[str | None] = mapped_column(CHAR(21), ForeignKey("agents.id"))
     reply_to_id: Mapped[str | None] = mapped_column(CHAR(21), ForeignKey("wa_chats.id"))
     type: Mapped[str] = mapped_column(CHAT_TYPE_ENUM)
     message: Mapped[str] = mapped_column(String)

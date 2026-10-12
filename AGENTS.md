@@ -10,7 +10,7 @@ Postgres via Supabase. Deployed on Railway.
 
 ## Stack
 
-Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-settings, httpx. LangGraph + LangChain are still declared for agents (`LLM_PROVIDER` in `app/core/constants.py` picks `langchain-openai` or `langchain-deepseek`), but no agent currently ships. `uv` for dependencies, `ruff` for lint and format.
+Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-settings, httpx. LangGraph + LangChain run the WhatsApp reply agent; its provider and model come from `llm_models`, while API keys stay in environment. `uv` for dependencies, `ruff` for lint and format.
 
 ## Running locally
 
@@ -30,6 +30,7 @@ Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-se
 | `tenant` | Tenant lookup by id, and `tenants/details`: a tenant plus each connection's live health checked against the Graph API — see `docs/api/tenant.md` |
 | `meta` | Meta App credentials (`meta_apps`) and per-tenant WABA connections (`meta_connections`); resolves a webhook's `phone_number_id` to its tenant and access token; `graph_client.py` reads phone number status and WABA webhook subscriptions |
 | `health` | Liveness and database reachability |
+| `agents` | Agent and knowledge CRUD, model catalog, active-agent selection, and durable LangGraph reply worker |
 | `shared` | Response envelope, `ApiError`, Bearer auth, pagination, shared httpx client, Meta signature verification, bcrypt/JWT primitives, Supabase Storage client |
 | `core`, `db` | Settings and the lazy async engine/session factory |
 
@@ -49,14 +50,14 @@ Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-se
 - **Enums are created by the DDL in `docs/db/`, not by SQLAlchemy.** Every `ENUM(...)` in an entity is declared `create_type=False`. `updated_at` is maintained by the ORM layer, not by database triggers — this database has no triggers.
 - **Comments:** one line, no multi-line comment blocks. If it needs more than one line, it needs a shorter explanation instead. Comments and docs are Indonesian; identifiers, enum values, column names, and API fields are English.
 - **Formatting:** `ruff` with line length 100, double quotes, and `E`/`F`/`I` lint rules. Run `uv run ruff format .` before committing.
-- **Module API docs:** every module with client-facing endpoints has a `docs/api/<module>.md` — one intro paragraph, then per endpoint: one-sentence description, `**Method:**`/`**Authorization:**` lines, request and response as JSON code blocks (request also gets a Field/Type/Required table; response doesn't), and an errors table. No base_url explanation, no curl examples.
+- **Module API docs:** every module with client-facing endpoints has a `docs/api/<module>.md` — one intro paragraph, then per endpoint: one-sentence description, `**Method:**`/`**Authorization:**` lines, request and response as JSON code blocks (request also gets a Field/Type/Required table; response doesn't), and an errors table. Pretty-print every JSON example with two-space indentation and one field per line; never compress an example into one line. Keep examples complete and consistent with the actual schema, response envelope, and error messages. No base_url explanation, no curl examples.
 
 ## Database
 
 **The schema is never generated from this code.** SQLAlchemy emits no DDL, so a schema change has to land in **two** places or things drift:
 
 1. The live Supabase project, via the `apply_migration` MCP tool.
-2. `docs/db/incredium.sql` — a hand-maintained reference DDL in the same format as `ordina-ddl.sql`. It is documentation, not a migration runner. A change that has to run standalone gets its own file beside it.
+2. `docs/db/incredium-ddl.sql` — the only SQL file in `docs/db/`, a hand-maintained reference DDL in the same format as `ordina-ddl.sql`. It includes initial seed data. It is documentation, not a migration runner; apply changes to the live project through the migration tool without keeping separate SQL migration files in this repo.
 
 The SQLAlchemy entities are a read-write mirror of that DDL, which is why their enums use `create_type=False`. Note that `id` defaults depend on a `nanoid()` function existing in the database.
 
@@ -64,10 +65,10 @@ Two Postgres details that have already cost time: enums cannot drop labels, so c
 
 ## Agents
 
-No agent currently ships. `app/modules/agents/llm.py` stays as the shared provider factory and `docs/agents/README.md` as the rules — one env var, measured token ceilings, write guards expressed in SQL rather than Python, and failing without taking down the flow that triggered them. Read that before adding one, and put it in `app/modules/agents/<agent_name>/`. Nothing may hang an agent off the webhook path: its LLM latency belongs in its own sweeper, not in the request that answers Meta.
+The WhatsApp reply agent lives in `app/modules/agents/whatsapp_reply/` and is documented in `docs/agents/README.md`. `app/modules/agents/llm.py` is the shared provider factory; the chosen model comes from `llm_models`, and credentials stay in environment. Read the agent rules before adding another one. LLM latency belongs in its own sweeper, never in the request that answers Meta.
 
 ## Known gaps
 
-- **RLS is disabled on every table.** Supabase's Data API exposes all tables unrestricted to anyone with the anon/service key. Don't enable RLS without policies — it would lock out this app's own connection too. Needs a deliberate pass.
+- **RLS is disabled on the older application tables.** The new agent tables have RLS enabled and client grants revoked, but the older tables still need a deliberate policy pass. Don't enable RLS on them without checking this app's database role and required access.
 - **App INFO logs arrive tagged `error` on Railway.** Python logging writes to stderr by default and the platform classifies stderr as error severity, so successful agent runs look like failures in the log stream. Cosmetic, but it buries real errors.
 - No automated tests. No CI config in this repo.

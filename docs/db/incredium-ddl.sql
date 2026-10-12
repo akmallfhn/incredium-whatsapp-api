@@ -35,7 +35,8 @@ CREATE TYPE wac_direction_enum AS ENUM (
 
 CREATE TYPE wac_sender_type_enum AS ENUM (
   'user',
-  'admin'
+  'admin',
+  'agent'
 );
 
 CREATE TYPE wac_type_enum AS ENUM (
@@ -113,12 +114,13 @@ CREATE TABLE users_access (
 -- Tenants
 
 CREATE TABLE tenants (
-  id          CHAR(21)     PRIMARY KEY  DEFAULT nanoid(),
-  name        VARCHAR      NOT NULL,
-  slug        VARCHAR      NOT NULL     UNIQUE,
-  status      status_enum  NOT NULL     DEFAULT 'active',
-  created_at  TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
-  updated_at  TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP
+  id               CHAR(21)     PRIMARY KEY  DEFAULT nanoid(),
+  name             VARCHAR      NOT NULL,
+  slug             VARCHAR      NOT NULL     UNIQUE,
+  status           status_enum  NOT NULL     DEFAULT 'active',
+  active_agent_id  CHAR(21)         NULL,
+  created_at       TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  updated_at       TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Meta WhatsApp connections
@@ -167,6 +169,7 @@ CREATE TABLE wa_chats (
   wam_id        VARCHAR               NOT NULL     UNIQUE,
   direction     wac_direction_enum    NOT NULL,
   sender_type   wac_sender_type_enum  NOT NULL,
+  agent_id      CHAR(21)                  NULL,
   reply_to_id   CHAR(21)                  NULL,
   type          wac_type_enum         NOT NULL,
   message       VARCHAR               NOT NULL,
@@ -223,6 +226,62 @@ CREATE TABLE wa_leads (
   updated_at              TIMESTAMPTZ   NOT NULL     DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Agent balasan WhatsApp
+
+CREATE TABLE llm_models (
+  id            CHAR(21)      PRIMARY KEY  DEFAULT nanoid(),
+  provider      VARCHAR(20)   NOT NULL,
+  api_model     VARCHAR(100)  NOT NULL,
+  display_name  VARCHAR(100)  NOT NULL,
+  created_at    TIMESTAMPTZ   NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMPTZ   NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (provider, api_model),
+  CHECK (provider IN ('openai', 'deepseek'))
+);
+
+CREATE TABLE agents (
+  id                   CHAR(21)      PRIMARY KEY  DEFAULT nanoid(),
+  tenant_id            CHAR(21)      NOT NULL,
+  model_id             CHAR(21)      NOT NULL,
+  name                 VARCHAR(100)  NOT NULL,
+  system_prompt        TEXT          NOT NULL,
+  transfer_conditions  TEXT          NOT NULL     DEFAULT '',
+  config_version       BIGINT        NOT NULL     DEFAULT 1,
+  created_at           TIMESTAMPTZ   NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  updated_at           TIMESTAMPTZ   NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (tenant_id, id)
+);
+
+CREATE TABLE agent_knowledge_sources (
+  id          CHAR(21)      PRIMARY KEY  DEFAULT nanoid(),
+  agent_id    CHAR(21)      NOT NULL,
+  title       VARCHAR(200)  NOT NULL,
+  kind        VARCHAR(16)   NOT NULL,
+  source_uri  TEXT              NULL,
+  content     TEXT              NULL,
+  status      status_enum   NOT NULL     DEFAULT 'inactive',
+  created_at  TIMESTAMPTZ   NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  updated_at  TIMESTAMPTZ   NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  CHECK (kind IN ('text', 'url', 'file'))
+);
+
+CREATE TABLE agent_reply_jobs (
+  conv_id                 CHAR(21)      PRIMARY KEY,
+  latest_inbound_chat_id  CHAR(21)      NOT NULL,
+  wa_phone_number_id      VARCHAR       NOT NULL,
+  generation              BIGINT        NOT NULL     DEFAULT 1,
+  claimed_generation      BIGINT            NULL,
+  due_at                  TIMESTAMPTZ   NOT NULL,
+  status                  VARCHAR(16)   NOT NULL     DEFAULT 'pending',
+  attempts                SMALLINT      NOT NULL     DEFAULT 0,
+  claimed_at              TIMESTAMPTZ       NULL,
+  error                   TEXT              NULL,
+  created_at              TIMESTAMPTZ   NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  updated_at              TIMESTAMPTZ   NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  CHECK (status IN ('pending', 'processing', 'sending', 'idle', 'failed', 'send_unknown')),
+  CHECK (attempts >= 0)
+);
+
 ----------------
 -- References --
 ----------------
@@ -230,11 +289,11 @@ CREATE TABLE wa_leads (
 -- User data
 
 ALTER TABLE tokens
-  ADD FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE;
+  ADD FOREIGN KEY (user_id) REFERENCES users (id);
 
 ALTER TABLE users_access
-  ADD FOREIGN KEY (user_id)   REFERENCES users (id)   ON DELETE CASCADE,
-  ADD FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE;
+  ADD FOREIGN KEY (user_id)   REFERENCES users (id),
+  ADD FOREIGN KEY (tenant_id) REFERENCES tenants (id);
 
 -- Meta WhatsApp connections
 
@@ -250,7 +309,8 @@ ALTER TABLE wa_conversations
 
 ALTER TABLE wa_chats
   ADD FOREIGN KEY (conv_id)     REFERENCES wa_conversations (id),
-  ADD FOREIGN KEY (reply_to_id) REFERENCES wa_chats (id);
+  ADD FOREIGN KEY (reply_to_id) REFERENCES wa_chats (id),
+  ADD FOREIGN KEY (agent_id)    REFERENCES agents (id);
 
 -- WhatsApp leads
 
@@ -258,10 +318,27 @@ ALTER TABLE wa_lead_stages
   ADD FOREIGN KEY (tenant_id) REFERENCES tenants (id);
 
 ALTER TABLE wa_leads
-  ADD FOREIGN KEY (conv_id)                REFERENCES wa_conversations (id) ON DELETE CASCADE,
+  ADD FOREIGN KEY (conv_id)                REFERENCES wa_conversations (id),
   ADD FOREIGN KEY (stage_id)               REFERENCES wa_lead_stages (id),
   ADD FOREIGN KEY (handler_id)             REFERENCES users (id),
   ADD FOREIGN KEY (evaluated_last_chat_id) REFERENCES wa_chats (id);
+
+-- Agent balasan WhatsApp
+
+ALTER TABLE agents
+  ADD FOREIGN KEY (tenant_id) REFERENCES tenants (id),
+  ADD FOREIGN KEY (model_id)  REFERENCES llm_models (id);
+
+ALTER TABLE tenants
+  ADD CONSTRAINT tenants_active_agent_same_tenant_fk
+  FOREIGN KEY (id, active_agent_id) REFERENCES agents (tenant_id, id);
+
+ALTER TABLE agent_knowledge_sources
+  ADD FOREIGN KEY (agent_id) REFERENCES agents (id);
+
+ALTER TABLE agent_reply_jobs
+  ADD FOREIGN KEY (conv_id)                REFERENCES wa_conversations (id),
+  ADD FOREIGN KEY (latest_inbound_chat_id) REFERENCES wa_chats (id);
 
 -------------
 -- Indexes --
@@ -296,3 +373,29 @@ CREATE INDEX wa_leads_brand_name_trgm_idx  ON wa_leads USING gin (brand_name gin
 
 CREATE INDEX wa_webhook_events_status_idx       ON wa_webhook_events (status, received_at);
 CREATE INDEX wa_webhook_events_received_at_idx  ON wa_webhook_events (received_at DESC);
+
+-- Agent balasan WhatsApp
+
+CREATE INDEX agents_tenant_id_idx ON agents (tenant_id);
+CREATE INDEX agents_model_id_idx ON agents (model_id);
+CREATE INDEX agent_knowledge_sources_agent_status_idx ON agent_knowledge_sources (agent_id, status);
+CREATE INDEX agent_reply_jobs_due_idx ON agent_reply_jobs (due_at) WHERE status = 'pending';
+CREATE INDEX agent_reply_jobs_claimed_idx ON agent_reply_jobs (claimed_at)
+  WHERE status = 'processing';
+CREATE INDEX wa_chats_agent_id_idx ON wa_chats (agent_id) WHERE agent_id IS NOT NULL;
+
+ALTER TABLE llm_models ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_knowledge_sources ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_reply_jobs ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON llm_models, agents, agent_knowledge_sources, agent_reply_jobs
+  FROM anon, authenticated;
+
+-----------------
+-- Seed models --
+-----------------
+
+INSERT INTO llm_models (provider, api_model, display_name) VALUES
+  ('openai', 'gpt-4.1-mini', 'GPT-4.1 mini'),
+  ('openai', 'gpt-4.1', 'GPT-4.1');

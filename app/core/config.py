@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     deepseek_api_key: str = ""
 
+    # Cache konfigurasi agent; tanpa kredensial, pembacaan langsung ke Postgres.
+    upstash_redis_rest_url: str = ""
+    upstash_redis_rest_token: str = ""
+
     # Supabase Storage untuk attachment WhatsApp; bucket sama dengan yang dibaca UI dashboard.
     supabase_url: str = ""
     supabase_service_role_key: str = ""

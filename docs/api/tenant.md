@@ -35,6 +35,7 @@ Mengembalikan detail satu tenant dan status setiap koneksi WhatsApp-nya menurut 
     "name": "TRC Brand Manager",
     "slug": "trc-brand-manager",
     "status": "active",
+    "active_agent_id": null,
     "connections": [
       {
         "id": "NcejwmWLTX1N3_uyJWDZ5",
@@ -63,6 +64,8 @@ Mengembalikan detail satu tenant dan status setiap koneksi WhatsApp-nya menurut 
 ```
 
 `status` di level tenant dan koneksi adalah status di database (`active` atau `inactive`); koneksi `inactive` tetap ditampilkan dan tetap diperiksa ke Meta. `connections` urut dari koneksi tertua dan bisa kosong. `display_number` diambil dari database dan memakai `meta.display_phone_number` kalau kolomnya masih kosong.
+
+`active_agent_id` adalah agent balasan WhatsApp yang dipilih tenant; `null` berarti balasan AI mati.
 
 Isi `meta` berasal dari dua panggilan Graph API per koneksi: `GET /{phone_number_id}` dan `GET /{waba_id}/subscribed_apps`.
 
