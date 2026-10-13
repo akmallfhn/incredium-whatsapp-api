@@ -47,7 +47,6 @@ Mengembalikan agent milik tenant, termasuk penanda agent yang sedang dipilih.
           "provider_image_url": "https://zxsbslyyzdpkqwwelgzp.supabase.co/storage/v1/object/public/pureva/llm/provider/icon_gpt.svg",
           "api_model": "gpt-4.1",
           "display_name": "GPT-4.1",
-          "description": null,
           "created_at": "2026-10-12T00:00:00+00:00",
           "updated_at": "2026-10-12T00:00:00+00:00"
         },
@@ -122,7 +121,6 @@ Mengembalikan satu konfigurasi agent milik tenant.
       "provider_image_url": "https://zxsbslyyzdpkqwwelgzp.supabase.co/storage/v1/object/public/pureva/llm/provider/icon_gpt.svg",
       "api_model": "gpt-4.1",
       "display_name": "GPT-4.1",
-      "description": null,
       "created_at": "2026-10-12T00:00:00+00:00",
       "updated_at": "2026-10-12T00:00:00+00:00"
     },
@@ -262,7 +260,6 @@ Memperbarui konfigurasi, termasuk kepribadian dan latar agent, serta menaikkan `
       "provider_image_url": "https://zxsbslyyzdpkqwwelgzp.supabase.co/storage/v1/object/public/pureva/llm/provider/icon_gpt.svg",
       "api_model": "gpt-4.1",
       "display_name": "GPT-4.1",
-      "description": null,
       "created_at": "2026-10-12T00:00:00+00:00",
       "updated_at": "2026-10-12T00:00:00+00:00"
     },

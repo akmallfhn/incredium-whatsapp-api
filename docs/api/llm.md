@@ -245,13 +245,37 @@ Mengembalikan katalog model dengan `provider_id`, `provider_name` (nama tampilan
         "provider_image_url": "https://zxsbslyyzdpkqwwelgzp.supabase.co/storage/v1/object/public/pureva/llm/provider/icon_gpt.svg",
         "api_model": "gpt-4.1",
         "display_name": "GPT-4.1",
-        "description": null,
+        "description": "Cocok untuk percakapan yang lebih rumit, instruksi rinci, dan jawaban yang perlu memahami konteks panjang.",
         "created_at": "2026-10-12T00:00:00+00:00",
         "updated_at": "2026-10-12T00:00:00+00:00"
+      },
+      {
+        "id": 1,
+        "provider_id": 1,
+        "provider_name": "ChatGPT",
+        "api_provider": "openai",
+        "provider_image_url": "https://zxsbslyyzdpkqwwelgzp.supabase.co/storage/v1/object/public/pureva/llm/provider/icon_gpt.svg",
+        "api_model": "gpt-4.1-mini",
+        "display_name": "GPT-4.1 mini",
+        "description": "Cocok untuk percakapan sederhana dan pertanyaan berulang saat respons cepat lebih diutamakan.",
+        "created_at": "2026-10-12T00:00:00+00:00",
+        "updated_at": "2026-10-12T00:00:00+00:00"
+      },
+      {
+        "id": 4,
+        "provider_id": 3,
+        "provider_name": "DeepSeek",
+        "api_provider": "deepseek",
+        "provider_image_url": "https://zxsbslyyzdpkqwwelgzp.supabase.co/storage/v1/object/public/pureva/llm/provider/icon_deepseek.svg",
+        "api_model": "deepseek-flash",
+        "display_name": "DeepSeek V4.1 Flash",
+        "description": "Cocok untuk percakapan harian yang perlu penalaran bertahap dengan respons cepat.",
+        "created_at": "2026-10-13T07:08:08+00:00",
+        "updated_at": "2026-10-13T07:08:08+00:00"
       }
     ],
     "metapaging": {
-      "total_data": 1,
+      "total_data": 3,
       "total_page": 1,
       "current_page": 1,
       "page_size": 20

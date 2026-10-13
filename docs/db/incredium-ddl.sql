@@ -501,14 +501,3 @@ CREATE TRIGGER update_agent_reply_jobs_updated_at_trigger
   BEFORE UPDATE ON agent_reply_jobs
   FOR EACH ROW
     EXECUTE FUNCTION update_updated_at();
-
--------------------
--- Seed providers --
--------------------
-
-INSERT INTO llm_provider (api_provider, display_name, image_url) VALUES
-  ('openai', 'ChatGPT', 'https://zxsbslyyzdpkqwwelgzp.supabase.co/storage/v1/object/public/pureva/llm/provider/icon_gpt.svg'),
-  ('deepseek', 'DeepSeek', 'https://zxsbslyyzdpkqwwelgzp.supabase.co/storage/v1/object/public/pureva/llm/provider/icon_deepseek.svg'),
-  ('anthropic', 'Claude', 'https://zxsbslyyzdpkqwwelgzp.supabase.co/storage/v1/object/public/pureva/llm/provider/icon_claude.svg'),
-  ('moonshot', 'Kimi', 'https://zxsbslyyzdpkqwwelgzp.supabase.co/storage/v1/object/public/pureva/llm/provider/icon_kimi.svg'),
-  ('google_genai', 'Gemini', 'https://zxsbslyyzdpkqwwelgzp.supabase.co/storage/v1/object/public/pureva/llm/provider/icon_gemini.svg');

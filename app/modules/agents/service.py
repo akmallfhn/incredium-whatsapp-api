@@ -40,11 +40,14 @@ def _required(value: str, field: str, maximum: int | None = None) -> str:
 
 
 def _agent_payload(agent: Agent, model: LlmModel | None, active_id: str | None) -> dict[str, Any]:
+    model_data = model_payload(model) if model is not None else None
+    if model_data is not None:
+        model_data.pop("description")
     return {
         "id": agent.id,
         "tenant_id": agent.tenant_id,
         "model_id": agent.model_id,
-        "model": model_payload(model) if model is not None else None,
+        "model": model_data,
         "name": agent.name,
         "personality": agent.personality,
         "system_prompt": agent.system_prompt,
