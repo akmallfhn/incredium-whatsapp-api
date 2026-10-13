@@ -39,13 +39,14 @@ def _required(value: str, field: str, maximum: int | None = None) -> str:
     return result
 
 
-def _agent_payload(agent: Agent, model: LlmModel, active_id: str | None) -> dict[str, Any]:
+def _agent_payload(agent: Agent, model: LlmModel | None, active_id: str | None) -> dict[str, Any]:
     return {
         "id": agent.id,
         "tenant_id": agent.tenant_id,
         "model_id": agent.model_id,
-        "model": model_payload(model),
+        "model": model_payload(model) if model is not None else None,
         "name": agent.name,
+        "personality": agent.personality,
         "system_prompt": agent.system_prompt,
         "transfer_conditions": agent.transfer_conditions,
         "config_version": agent.config_version,
@@ -111,59 +112,57 @@ class AgentService:
     async def details(self, req: AgentDetailsRequest, token: str) -> dict[str, Any]:
         await self._access(token, req.tenant_id)
         agent = await self._agent(req.tenant_id, req.id)
-        model = await self._models.find_model(agent.model_id)
+        model = (
+            await self._models.find_model(agent.model_id) if agent.model_id is not None else None
+        )
         tenant = await self._repo.tenant(req.tenant_id)
-        assert model is not None and tenant is not None
+        assert tenant is not None
         return _agent_payload(agent, model, tenant.active_agent_id)
 
     async def create(self, req: AgentCreateRequest, token: str) -> dict[str, Any]:
         await self._access(token, req.tenant_id, write=True)
-        model = await self._models.find_model(req.model_id)
-        if model is None:
-            raise ApiError(404, "model not found")
-        if model.provider.api_provider not in {"openai", "deepseek"}:
-            raise ApiError(400, "model provider is not supported")
         agent = await self._repo.create_agent(
             tenant_id=req.tenant_id,
-            model_id=req.model_id,
             name=_required(req.name, "name", 100),
-            system_prompt=_required(req.system_prompt, "system_prompt"),
-            transfer_conditions=req.transfer_conditions.strip(),
         )
         await self._session.commit()
-        model = await self._models.find_model(agent.model_id)
-        assert model is not None
-        return _agent_payload(agent, model, None)
+        return _agent_payload(agent, None, None)
 
     async def update(self, req: AgentUpdateRequest, token: str) -> dict[str, Any]:
         await self._access(token, req.tenant_id, write=True)
+        tenant = await self._repo.tenant_for_update(req.tenant_id)
+        if tenant is None:
+            raise ApiError(404, "tenant not found")
         agent = await self._agent(req.tenant_id, req.id)
         changes: dict[str, Any] = {}
-        for field in ("model_id", "name", "system_prompt", "transfer_conditions"):
+        for field in ("model_id", "name", "personality", "system_prompt", "transfer_conditions"):
             if field not in req.model_fields_set:
                 continue
             value = getattr(req, field)
-            if value is None:
-                raise ApiError(400, f"{field} cannot be null")
             if field == "model_id":
-                model = await self._models.find_model(value)
-                if model is None:
-                    raise ApiError(404, "model not found")
-                if model.provider.api_provider not in {"openai", "deepseek"}:
-                    raise ApiError(400, "model provider is not supported")
+                if value is not None:
+                    model = await self._models.find_model(value)
+                    if model is None:
+                        raise ApiError(404, "model not found")
+                    if model.provider.api_provider not in {"openai", "deepseek"}:
+                        raise ApiError(400, "model provider is not supported")
                 changes[field] = value
-            elif field == "transfer_conditions":
-                changes[field] = value.strip()
+            elif field == "name":
+                if value is None:
+                    raise ApiError(400, "name cannot be null")
+                changes[field] = _required(value, field, 100)
             else:
-                changes[field] = _required(value, field, 100 if field == "name" else None)
+                changes[field] = (value.strip() or None) if value is not None else None
         if not changes:
             raise ApiError(400, "no fields to update")
+        if tenant.active_agent_id == agent.id:
+            await self._require_ready(agent, changes)
         agent = await self._repo.update_agent(agent, **changes)
         await self._session.commit()
         await self._cache.delete_agent(req.tenant_id)
-        model = await self._models.find_model(agent.model_id)
-        tenant = await self._repo.tenant(req.tenant_id)
-        assert model is not None and tenant is not None
+        model = (
+            await self._models.find_model(agent.model_id) if agent.model_id is not None else None
+        )
         return _agent_payload(agent, model, tenant.active_agent_id)
 
     async def delete(self, req: AgentDeleteRequest, token: str) -> dict[str, Any]:
@@ -190,11 +189,27 @@ class AgentService:
         if tenant is None:
             raise ApiError(404, "tenant not found")
         if req.agent_id is not None:
-            await self._agent(req.tenant_id, req.agent_id)
+            agent = await self._agent(req.tenant_id, req.agent_id)
+            await self._require_ready(agent)
         tenant.active_agent_id = req.agent_id
         await self._session.commit()
         await self._cache.delete_agent(req.tenant_id)
         return {"tenant_id": req.tenant_id, "active_agent_id": tenant.active_agent_id}
+
+    async def _require_ready(self, agent: Agent, changes: dict[str, Any] | None = None) -> None:
+        values = changes or {}
+        model_id = values.get("model_id", agent.model_id)
+        if model_id is None:
+            raise ApiError(400, "model_id is required for active agent")
+        for field in ("system_prompt", "transfer_conditions"):
+            value = values.get(field, getattr(agent, field))
+            if not value or not value.strip():
+                raise ApiError(400, f"{field} is required for active agent")
+        model = await self._models.find_model(model_id)
+        if model is None:
+            raise ApiError(404, "model not found")
+        if model.provider.api_provider not in {"openai", "deepseek"}:
+            raise ApiError(400, "model provider is not supported")
 
     async def list_sources(self, req: KnowledgeListRequest, token: str) -> dict[str, Any]:
         await self._access(token, req.tenant_id)

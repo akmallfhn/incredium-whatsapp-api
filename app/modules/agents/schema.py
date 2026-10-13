@@ -16,10 +16,7 @@ class AgentDetailsRequest(BaseModel):
 
 class AgentCreateRequest(BaseModel):
     tenant_id: str
-    model_id: int
     name: str
-    system_prompt: str
-    transfer_conditions: str = ""
 
 
 class AgentUpdateRequest(BaseModel):
@@ -27,6 +24,7 @@ class AgentUpdateRequest(BaseModel):
     id: str
     model_id: int | None = None
     name: str | None = None
+    personality: str | None = None
     system_prompt: str | None = None
     transfer_conditions: str | None = None
 

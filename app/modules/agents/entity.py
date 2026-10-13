@@ -12,10 +12,11 @@ class Agent(Base):
 
     id: Mapped[str] = mapped_column(CHAR(21), primary_key=True, server_default=text("nanoid()"))
     tenant_id: Mapped[str] = mapped_column(CHAR(21), ForeignKey("tenants.id"))
-    model_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("llm_models.id"))
+    model_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("llm_models.id"))
     name: Mapped[str] = mapped_column(String(100))
-    system_prompt: Mapped[str] = mapped_column(Text)
-    transfer_conditions: Mapped[str] = mapped_column(Text, server_default=text("''"))
+    personality: Mapped[str | None] = mapped_column(Text)
+    system_prompt: Mapped[str | None] = mapped_column(Text)
+    transfer_conditions: Mapped[str | None] = mapped_column(Text)
     config_version: Mapped[int] = mapped_column(BigInteger, server_default=text("1"))
     created_at: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))
     updated_at: Mapped[datetime] = mapped_column(

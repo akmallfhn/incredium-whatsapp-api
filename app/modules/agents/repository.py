@@ -19,10 +19,10 @@ class AgentRepository:
 
     async def list_agents(
         self, *, tenant_id: str, limit: int, skip: int
-    ) -> list[tuple[Agent, LlmModel]]:
+    ) -> list[tuple[Agent, LlmModel | None]]:
         stmt = (
             select(Agent, LlmModel)
-            .join(LlmModel, LlmModel.id == Agent.model_id)
+            .outerjoin(LlmModel, LlmModel.id == Agent.model_id)
             .where(Agent.tenant_id == tenant_id)
             .order_by(Agent.created_at.desc(), Agent.id.desc())
             .limit(limit)

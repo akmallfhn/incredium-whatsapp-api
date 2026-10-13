@@ -64,6 +64,8 @@ class AgentReplyWorker:
                 {
                     "provider": config["provider"],
                     "api_model": config["api_model"],
+                    "name": config["name"],
+                    "personality": config.get("personality"),
                     "system_prompt": config["system_prompt"],
                     "transfer_conditions": config["transfer_conditions"],
                     "transcript": transcript,

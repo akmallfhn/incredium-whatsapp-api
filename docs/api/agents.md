@@ -1,6 +1,6 @@
 # Agents
 
-Endpoint ini mengelola agent balasan WhatsApp, sumber pengetahuan, dan pilihan agent aktif per tenant. Katalog provider dan model ada di [dokumentasi LLM](llm.md) dengan endpoint `/api/v1/llm`. Semua operasi memakai `POST` dengan JSON body dan JWT dari `auth/login`. Pengguna harus punya akses tenant untuk membaca atau mengubah agent; perubahan memerlukan peran `Administrator` atau `Super Admin`. Endpoint daftar memakai `page` default `1` dan `page_size` default `20` dengan batas `100`. `tenants.active_agent_id` adalah sumber kebenaran pilihan agent: `null` mematikan balasan AI tenant, sedangkan `is_active` pada respons agent adalah penanda turunan dari nilai tersebut.
+Endpoint ini mengelola agent balasan WhatsApp, sumber pengetahuan, dan pilihan agent aktif per tenant. Katalog provider dan model ada di [dokumentasi LLM](llm.md) dengan endpoint `/api/v1/llm`. Semua operasi memakai `POST` dengan JSON body dan JWT dari `auth/login`. Pengguna harus punya akses tenant untuk membaca atau mengubah agent; perubahan memerlukan peran `Administrator` atau `Super Admin`. Endpoint daftar memakai `page` default `1` dan `page_size` default `20` dengan batas `100`. `tenants.active_agent_id` adalah sumber kebenaran pilihan agent: `null` mematikan balasan AI tenant, sedangkan `is_active` pada respons agent adalah penanda turunan dari nilai tersebut. Agent baru dapat dibuat hanya dengan nama dan tenant; `model_id`, `system_prompt`, `transfer_conditions`, dan `personality` awalnya `null`.
 
 ## Daftar agent
 
@@ -52,6 +52,7 @@ Mengembalikan agent milik tenant, termasuk penanda agent yang sedang dipilih.
           "updated_at": "2026-10-12T00:00:00+00:00"
         },
         "name": "Asisten Incredium",
+        "personality": "Saya Nara, berpengalaman menangani pertanyaan produk dan berbicara dengan ramah.",
         "system_prompt": "Bantu pelanggan dengan sopan.",
         "transfer_conditions": "Alihkan jika meminta staf.",
         "config_version": 1,
@@ -126,6 +127,7 @@ Mengembalikan satu konfigurasi agent milik tenant.
       "updated_at": "2026-10-12T00:00:00+00:00"
     },
     "name": "Asisten Incredium",
+    "personality": "Saya Nara, berpengalaman menangani pertanyaan produk dan berbicara dengan ramah.",
     "system_prompt": "Bantu pelanggan dengan sopan.",
     "transfer_conditions": "Alihkan jika meminta staf.",
     "config_version": 1,
@@ -149,7 +151,7 @@ Mengembalikan satu konfigurasi agent milik tenant.
 
 ## Buat agent
 
-Membuat konfigurasi agent tanpa langsung memilihnya sebagai agent aktif.
+Membuat draf agent dengan nama dan tenant tanpa langsung memilihnya sebagai agent aktif.
 
 **Method:** `POST /api/v1/agents/create`  
 **Authorization:** Bearer JWT, `Administrator` atau `Super Admin` dengan akses tenant
@@ -159,22 +161,16 @@ Membuat konfigurasi agent tanpa langsung memilihnya sebagai agent aktif.
 ```json
 {
   "tenant_id": "tenant-id",
-  "model_id": 2,
-  "name": "Asisten Incredium",
-  "system_prompt": "Bantu pelanggan dengan sopan.",
-  "transfer_conditions": "Alihkan jika meminta staf."
+  "name": "Asisten Incredium"
 }
 ```
 
 | Field | Type | Required |
 |---|---|---|
 | `tenant_id` | string | yes |
-| `model_id` | integer | yes |
 | `name` | string | yes |
-| `system_prompt` | string | yes |
-| `transfer_conditions` | string | no |
 
-`transfer_conditions` adalah teks biasa dan boleh kosong. Setelah dibuat, pilih agent melalui endpoint `select-active` agar pesan baru dapat diproses.
+Tambahkan model, prompt, dan kondisi transfer melalui endpoint `update` sebelum memilih agent aktif.
 
 **Response:** `201 CREATED`
 
@@ -187,22 +183,12 @@ Membuat konfigurasi agent tanpa langsung memilihnya sebagai agent aktif.
   "data": {
     "id": "agent-id",
     "tenant_id": "tenant-id",
-    "model_id": 2,
-    "model": {
-      "id": 2,
-      "provider_id": 1,
-      "provider_name": "ChatGPT",
-      "api_provider": "openai",
-      "provider_image_url": "https://zxsbslyyzdpkqwwelgzp.supabase.co/storage/v1/object/public/pureva/llm/provider/icon_gpt.svg",
-      "api_model": "gpt-4.1",
-      "display_name": "GPT-4.1",
-      "description": null,
-      "created_at": "2026-10-12T00:00:00+00:00",
-      "updated_at": "2026-10-12T00:00:00+00:00"
-    },
+    "model_id": null,
+    "model": null,
     "name": "Asisten Incredium",
-    "system_prompt": "Bantu pelanggan dengan sopan.",
-    "transfer_conditions": "Alihkan jika meminta staf.",
+    "personality": null,
+    "system_prompt": null,
+    "transfer_conditions": null,
     "config_version": 1,
     "is_active": false,
     "created_at": "2026-10-12T00:00:00+00:00",
@@ -218,17 +204,14 @@ Membuat konfigurasi agent tanpa langsung memilihnya sebagai agent aktif.
 | 400 | BAD_REQUEST | `invalid request: <field>` | Field wajib hilang atau tipe/nilai tidak sesuai |
 | 400 | BAD_REQUEST | `tenant_id is required` | ID tenant kosong atau hanya spasi |
 | 400 | BAD_REQUEST | `name is required` | Nama kosong |
-| 400 | BAD_REQUEST | `system_prompt is required` | Prompt kosong |
 | 400 | BAD_REQUEST | `name exceeds 100 characters` | Nama terlalu panjang |
-| 400 | BAD_REQUEST | `model provider is not supported` | Integrasi provider model belum tersedia di worker |
 | 401 | UNAUTHORIZED | `missing or invalid authorization header` | JWT hilang, tidak sah, kedaluwarsa, atau dicabut |
 | 403 | FORBIDDEN | `tenant access denied` | Pengguna tidak punya akses tenant |
 | 403 | FORBIDDEN | `agent management denied` | Peran tidak boleh mengubah agent atau knowledge |
-| 404 | NOT_FOUND | `model not found` | ID model tidak ada di katalog |
 
 ## Ubah agent
 
-Memperbarui field yang dikirim dan menaikkan `config_version` agar cache lama tidak dipakai.
+Memperbarui konfigurasi, termasuk kepribadian dan latar agent, serta menaikkan `config_version` agar cache lama tidak dipakai.
 
 **Method:** `POST /api/v1/agents/update`  
 **Authorization:** Bearer JWT, `Administrator` atau `Super Admin` dengan akses tenant
@@ -239,7 +222,11 @@ Memperbarui field yang dikirim dan menaikkan `config_version` agar cache lama ti
 {
   "tenant_id": "tenant-id",
   "id": "agent-id",
-  "name": "Asisten Baru"
+  "name": "Asisten Baru",
+  "model_id": 2,
+  "personality": "Saya Nara, berpengalaman menangani pertanyaan produk dan berbicara dengan ramah.",
+  "system_prompt": "Bantu pelanggan dengan sopan.",
+  "transfer_conditions": "Alihkan jika meminta staf."
 }
 ```
 
@@ -247,10 +234,13 @@ Memperbarui field yang dikirim dan menaikkan `config_version` agar cache lama ti
 |---|---|---|
 | `tenant_id` | string | yes |
 | `id` | string | yes |
-| `model_id` | integer | no |
+| `model_id` | integer atau `null` | no |
 | `name` | string | no |
-| `system_prompt` | string | no |
-| `transfer_conditions` | string | no |
+| `personality` | string atau `null` | no |
+| `system_prompt` | string atau `null` | no |
+| `transfer_conditions` | string atau `null` | no |
+
+`model_id`, `system_prompt`, dan `transfer_conditions` boleh `null` pada agent yang belum aktif. Teks kosong dinormalisasi menjadi `null`. Jika agent sedang aktif, hasil perubahan wajib tetap memiliki model, prompt, dan kondisi transfer yang tidak kosong. `personality` tetap opsional dan dapat berisi identitas, pengalaman, serta gaya bicara agent. Nama dari field `name` dan isi `personality` masuk ke konteks LangGraph.
 
 **Response:** `200 OK`
 
@@ -277,6 +267,7 @@ Memperbarui field yang dikirim dan menaikkan `config_version` agar cache lama ti
       "updated_at": "2026-10-12T00:00:00+00:00"
     },
     "name": "Asisten Baru",
+    "personality": "Saya Nara, berpengalaman menangani pertanyaan produk dan berbicara dengan ramah.",
     "system_prompt": "Bantu pelanggan dengan sopan.",
     "transfer_conditions": "Alihkan jika meminta staf.",
     "config_version": 2,
@@ -295,8 +286,9 @@ Memperbarui field yang dikirim dan menaikkan `config_version` agar cache lama ti
 | 400 | BAD_REQUEST | `tenant_id is required` | ID tenant kosong atau hanya spasi |
 | 400 | BAD_REQUEST | `id is required` | ID agent atau sumber kosong |
 | 400 | BAD_REQUEST | `no fields to update` | Tidak ada field perubahan |
-| 400 | BAD_REQUEST | `<field> cannot be null` | Field perubahan dikirim bernilai null |
-| 400 | BAD_REQUEST | `<field> is required` | Nama atau prompt kosong |
+| 400 | BAD_REQUEST | `name cannot be null` | Nama dikirim bernilai `null` |
+| 400 | BAD_REQUEST | `name is required` | Nama kosong |
+| 400 | BAD_REQUEST | `<field> is required for active agent` | Agent aktif menjadi tidak lengkap |
 | 400 | BAD_REQUEST | `model provider is not supported` | Integrasi provider model belum tersedia di worker |
 | 401 | UNAUTHORIZED | `missing or invalid authorization header` | JWT hilang, tidak sah, kedaluwarsa, atau dicabut |
 | 403 | FORBIDDEN | `tenant access denied` | Pengguna tidak punya akses tenant |
@@ -376,7 +368,7 @@ Memilih satu agent milik tenant atau mengirim `null` untuk mematikan balasan AI 
 | `tenant_id` | string | yes |
 | `agent_id` | string atau `null` | yes |
 
-Field `agent_id` wajib dikirim. Nilai `null` menonaktifkan balasan AI untuk tenant; memilih agent tidak mengubah mode `human` pada percakapan yang sudah diambil alih staf.
+Field `agent_id` wajib dikirim. Nilai `null` menonaktifkan balasan AI untuk tenant. Agent yang dipilih wajib memiliki `model_id`, `system_prompt`, dan `transfer_conditions` yang tidak kosong; memilih agent tidak mengubah mode `human` pada percakapan yang sudah diambil alih staf.
 
 **Response:** `200 OK`
 
@@ -399,6 +391,8 @@ Field `agent_id` wajib dikirim. Nilai `null` menonaktifkan balasan AI untuk tena
 |---|---|---|---|
 | 400 | BAD_REQUEST | `invalid request: <field>` | Field wajib hilang atau tipe/nilai tidak sesuai |
 | 400 | BAD_REQUEST | `tenant_id is required` | ID tenant kosong atau hanya spasi |
+| 400 | BAD_REQUEST | `<field> is required for active agent` | Model, prompt, atau kondisi transfer belum lengkap |
+| 400 | BAD_REQUEST | `model provider is not supported` | Integrasi provider model belum tersedia di worker |
 | 401 | UNAUTHORIZED | `missing or invalid authorization header` | JWT hilang, tidak sah, kedaluwarsa, atau dicabut |
 | 403 | FORBIDDEN | `tenant access denied` | Pengguna tidak punya akses tenant |
 | 403 | FORBIDDEN | `agent management denied` | Peran tidak boleh mengubah agent atau knowledge |

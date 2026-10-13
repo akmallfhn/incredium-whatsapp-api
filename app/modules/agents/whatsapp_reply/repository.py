@@ -125,10 +125,15 @@ class AgentReplyRepository:
         if row is None:
             return None
         agent, model = row
+        if not agent.system_prompt or not agent.system_prompt.strip():
+            return None
+        if not agent.transfer_conditions or not agent.transfer_conditions.strip():
+            return None
         return {
             "agent_id": agent.id,
             "version": agent.config_version,
             "name": agent.name,
+            "personality": agent.personality,
             "system_prompt": agent.system_prompt,
             "transfer_conditions": agent.transfer_conditions,
             "provider": model.provider.api_provider,

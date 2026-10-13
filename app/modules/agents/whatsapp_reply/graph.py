@@ -22,6 +22,8 @@ class ReplyDecision(BaseModel):
 class ReplyState(TypedDict, total=False):
     provider: str
     api_model: str
+    name: str
+    personality: str | None
     system_prompt: str
     transfer_conditions: str
     transcript: str
@@ -40,6 +42,8 @@ async def _decide(state: ReplyState) -> ReplyState:
         )
         system = (
             f"{state['system_prompt']}\n\n"
+            f"Nama agent: {state['name']}\n"
+            f"Kepribadian dan latar agent:\n{state.get('personality') or 'Tidak ada.'}\n\n"
             f"Kondisi alihkan ke staf:\n{state['transfer_conditions'] or 'Tidak ada.'}\n\n"
             "Kembalikan action reply, transfer, atau skip. "
             "Untuk reply, isi message singkat dalam bahasa percakapan. "
