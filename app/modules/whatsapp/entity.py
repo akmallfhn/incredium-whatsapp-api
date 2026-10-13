@@ -126,7 +126,7 @@ class WaLead(Base):
     )
     stage_id: Mapped[str | None] = mapped_column(CHAR(21), ForeignKey("wa_lead_stages.id"))
     handler_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False))
-    mode: Mapped[str] = mapped_column(MODE_ENUM, server_default=text("'human'"))
+    mode: Mapped[str] = mapped_column(MODE_ENUM, server_default=text("'ai'"))
     # Kontak tim sendiri; percakapannya dibuang dari semua query stat.
     is_internal: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     brand_name: Mapped[str | None] = mapped_column(String)

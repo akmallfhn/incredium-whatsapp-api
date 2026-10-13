@@ -217,7 +217,7 @@ CREATE TABLE wa_leads (
   conv_id                 CHAR(21)      PRIMARY KEY,
   stage_id                CHAR(21)          NULL,
   handler_id              UUID              NULL,
-  mode                    wa_mode_enum  NOT NULL     DEFAULT 'human',
+  mode                    wa_mode_enum  NOT NULL     DEFAULT 'ai',
   is_internal             BOOLEAN       NOT NULL     DEFAULT false,
   brand_name              VARCHAR           NULL,
   project_value           BIGINT            NULL,
@@ -228,7 +228,7 @@ CREATE TABLE wa_leads (
   updated_at              TIMESTAMPTZ   NOT NULL     DEFAULT CURRENT_TIMESTAMP
 );
 
--- Agent balasan WhatsApp
+-- Agent AI
 
 CREATE TABLE llm_provider (
   id            BIGSERIAL     PRIMARY KEY,
