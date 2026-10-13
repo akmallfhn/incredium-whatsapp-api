@@ -65,12 +65,14 @@ def _primary(tier: Tier, max_tokens: int, timeout: float) -> BaseChatModel:
 def _prepare(
     llm: BaseChatModel,
     *,
+    provider_name: str,
     tools: list[Any] | None,
     structured_output: Any | None,
 ) -> Runnable:
     """Pasang tool / structured output di tiap provider sesuai cara yang didukungnya."""
     if structured_output is not None:
-        return llm.with_structured_output(structured_output, method="json_schema")
+        method = "json_mode" if provider_name == "deepseek" else "json_schema"
+        return llm.with_structured_output(structured_output, method=method)
     if tools:
         return llm.bind_tools(tools)
     return llm
@@ -89,6 +91,7 @@ def build_llm(
         raise RuntimeError("API key provider utama wajib diisi untuk agent")
     return _prepare(
         _primary(tier, max_tokens, timeout),
+        provider_name=provider(),
         tools=tools,
         structured_output=structured_output,
     )
@@ -127,4 +130,6 @@ def build_agent_llm(
         )
     else:
         raise RuntimeError(f"unsupported LLM provider: {provider_name}")
-    return _prepare(llm, tools=None, structured_output=structured_output)
+    return _prepare(
+        llm, provider_name=provider_name, tools=None, structured_output=structured_output
+    )

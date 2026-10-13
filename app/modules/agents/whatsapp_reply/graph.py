@@ -45,8 +45,8 @@ async def _decide(state: ReplyState) -> ReplyState:
             f"Nama agent: {state['name']}\n"
             f"Kepribadian dan latar agent:\n{state.get('personality') or 'Tidak ada.'}\n\n"
             f"Kondisi alihkan ke staf:\n{state['transfer_conditions'] or 'Tidak ada.'}\n\n"
-            "Kembalikan action reply, transfer, atau skip. "
-            "Untuk reply, isi message singkat dalam bahasa percakapan. "
+            "Kembalikan JSON valid dengan field action (reply, transfer, atau skip), "
+            "message, dan reason. Untuk reply, isi message singkat dalam bahasa percakapan. "
             "Jangan menjawab hal yang tidak didukung pengetahuan yang tersedia."
         )
         context = f"Pengetahuan:\n{state['knowledge']}\n\nRiwayat pesan:\n{state['transcript']}"

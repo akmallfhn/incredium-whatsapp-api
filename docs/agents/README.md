@@ -4,7 +4,7 @@ Agent automation Incredium berjalan di pekerja terpisah dari respons webhook Met
 
 | Agent | Pemicu | Yang diubah |
 |---|---|---|
-| [Balasan WhatsApp](whatsapp-reply-plan.md) | Chat inbound baru, setelah debounce dua detik | `agent_reply_jobs`, `wa_leads.mode`, `wa_chats` outbound |
+| Balasan WhatsApp | Chat inbound baru, setelah debounce dua detik | `agent_reply_jobs`, `wa_leads.mode`, `wa_chats` outbound |
 
 ## Aturan bersama
 
