@@ -15,6 +15,7 @@ _STATUS_NAME = {
     404: "NOT_FOUND",
     409: "CONFLICT",
     500: "INTERNAL_SERVER_ERROR",
+    502: "BAD_GATEWAY",
 }
 
 

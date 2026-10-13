@@ -1,6 +1,6 @@
 # Tenant
 
-Endpoint ini menampilkan data satu tenant beserta semua koneksi WhatsApp-nya di `meta_connections`. Setiap koneksi diperiksa langsung ke Graph API Meta pada saat permintaan, jadi hasilnya menunjukkan kondisi nyata nomor tersebut, bukan hanya isi database: apakah nomornya terhubung ke Cloud API, apakah juga dipakai di aplikasi WhatsApp Business (coexistence), dan apakah app Meta milik koneksi itu masih berlangganan webhook WABA-nya. Akses memakai JWT hasil `auth/login` dan dibatasi tenant yang tercatat di `users_access`.
+Endpoint ini menampilkan data satu tenant beserta semua koneksi WhatsApp-nya di `meta_connections`, serta dapat mendaftarkan app Meta milik koneksi ke webhook WABA. Detail koneksi diperiksa langsung ke Graph API Meta pada saat permintaan, jadi hasilnya menunjukkan kondisi nyata nomor tersebut, bukan hanya isi database: apakah nomornya terhubung ke Cloud API, apakah juga dipakai di aplikasi WhatsApp Business (coexistence), dan apakah app Meta milik koneksi itu masih berlangganan webhook WABA-nya. Akses memakai JWT hasil `auth/login` dan dibatasi tenant yang tercatat di `users_access`.
 
 ## `POST /api/v1/tenants/details`
 
@@ -92,3 +92,63 @@ Kegagalan ke Meta tidak menggagalkan endpoint: respons tetap `200` dengan `meta.
 | 403 | `FORBIDDEN` | `tenant access denied` | pengguna tidak punya akses ke tenant ini, atau tenant-nya `inactive` |
 | 404 | `NOT_FOUND` | `tenant not found` | tenant tidak ada |
 | 500 | `INTERNAL_SERVER_ERROR` | `an unexpected error occurred` | `JWT_SECRET` belum diatur atau kegagalan server |
+
+## `POST /api/v1/tenants/connections/subscribe`
+
+Mendaftarkan app Meta yang terhubung ke satu koneksi WhatsApp tenant sebagai penerima webhook WABA.
+
+**Method:** `POST`
+
+**Authorization:** `Bearer <jwt>` dari `POST /api/v1/auth/login`; peran `Administrator` atau `Super Admin` dengan akses tenant.
+
+**Request**
+
+```json
+{
+  "tenant_id": "8yuPA4qUjqC3OfizucQoH",
+  "connection_id": "NcejwmWLTX1N3_uyJWDZ5"
+}
+```
+
+| Field | Type | Required |
+|---|---|---|
+| `tenant_id` | string | yes |
+| `connection_id` | string | yes |
+
+**Response** — `200 OK`
+
+```json
+{
+  "success": true,
+  "code": 200,
+  "status": "OK",
+  "message": "whatsapp app subscribed successfully",
+  "data": {
+    "tenant_id": "8yuPA4qUjqC3OfizucQoH",
+    "connection_id": "NcejwmWLTX1N3_uyJWDZ5",
+    "waba_id": "1752524935415356",
+    "app_id": "1372054147774697",
+    "webhook_subscribed": true,
+    "already_subscribed": false
+  }
+}
+```
+
+Endpoint mengambil WABA, app, dan access token dari koneksi yang tersimpan; klien tidak dapat mengganti tujuan subscription lewat body. Sebelum mengirim `POST /{waba_id}/subscribed_apps` ke Meta, backend memastikan token berasal dari app yang tercatat di koneksi. Setelahnya, backend membaca ulang daftar app subscribed untuk memastikan app tersebut muncul. Jika sudah subscribed, endpoint tidak mengirim `POST` lagi dan mengembalikan `already_subscribed: true`.
+
+**Errors**
+
+| Code | Status | Message | When |
+|---|---|---|---|
+| 400 | `BAD_REQUEST` | `invalid request: <field>` | field wajib hilang atau bukan string |
+| 400 | `BAD_REQUEST` | `tenant_id is required` | ID tenant kosong atau hanya spasi |
+| 400 | `BAD_REQUEST` | `connection_id is required` | ID koneksi kosong atau hanya spasi |
+| 401 | `UNAUTHORIZED` | `missing or invalid authorization header` | JWT hilang, tidak sah, kedaluwarsa, atau dicabut |
+| 403 | `FORBIDDEN` | `tenant access denied` | pengguna tidak punya akses tenant |
+| 403 | `FORBIDDEN` | `connection management denied` | peran pengguna tidak boleh mengubah subscription |
+| 404 | `NOT_FOUND` | `connection not found` | koneksi tidak ada pada tenant |
+| 409 | `CONFLICT` | `connection or Meta app is inactive` | koneksi atau app tidak aktif |
+| 409 | `CONFLICT` | `connection access token is empty` | koneksi tidak punya token |
+| 409 | `CONFLICT` | `access token belongs to another Meta app` | token berasal dari app lain |
+| 502 | `BAD_GATEWAY` | `Meta subscription failed: ...` | Graph API Meta menolak atau tidak dapat dihubungi |
+| 502 | `BAD_GATEWAY` | `Meta did not list the app after subscription` | Meta mengakui permintaan tetapi verifikasi daftar belum berhasil |

@@ -7,11 +7,13 @@ from app.modules.auth.service import AuthService
 from app.modules.meta.entity import MetaConnection
 from app.modules.meta.graph_client import MetaGraphClient, MetaGraphError
 from app.modules.meta.repository import MetaConnectionRepository
+from app.modules.tenant.entity import STATUS_ACTIVE
 from app.modules.tenant.repository import TenantRepository
-from app.modules.tenant.schema import TenantDetailRequest
+from app.modules.tenant.schema import TenantConnectionSubscribeRequest, TenantDetailRequest
 from app.shared.response import ApiError
 
 PHONE_STATUS_CONNECTED = "CONNECTED"
+SUBSCRIPTION_ROLES = {"Super Admin", "Administrator"}
 
 
 class TenantService:
@@ -49,6 +51,59 @@ class TenantService:
             "status": tenant.status,
             "active_agent_id": tenant.active_agent_id,
             "connections": list(connections),
+        }
+
+    async def subscribe_connection(
+        self, req: TenantConnectionSubscribeRequest, token: str
+    ) -> dict[str, Any]:
+        user = await self._auth.authenticate(token)
+        if not req.tenant_id.strip():
+            raise ApiError(400, "tenant_id is required")
+        if not req.connection_id.strip():
+            raise ApiError(400, "connection_id is required")
+        if not any(tenant["id"] == req.tenant_id for tenant in user["tenants"]):
+            raise ApiError(403, "tenant access denied")
+        if user["role"] not in SUBSCRIPTION_ROLES:
+            raise ApiError(403, "connection management denied")
+
+        row = await self._connections.find_by_id_in_tenant(
+            tenant_id=req.tenant_id, connection_id=req.connection_id
+        )
+        if row is None:
+            raise ApiError(404, "connection not found")
+        conn, app = row
+        if conn.status != STATUS_ACTIVE or app.status != STATUS_ACTIVE:
+            raise ApiError(409, "connection or Meta app is inactive")
+        if not conn.access_token:
+            raise ApiError(409, "connection access token is empty")
+
+        try:
+            token_app_id = await self._graph.token_app_id(access_token=conn.access_token)
+            if token_app_id != app.app_id:
+                raise ApiError(409, "access token belongs to another Meta app")
+            subscribed_ids = await self._graph.subscribed_app_ids(
+                access_token=conn.access_token, waba_id=conn.wa_business_id
+            )
+            already_subscribed = app.app_id in subscribed_ids
+            if not already_subscribed:
+                await self._graph.subscribe_app_to_waba(
+                    access_token=conn.access_token, waba_id=conn.wa_business_id
+                )
+                subscribed_ids = await self._graph.subscribed_app_ids(
+                    access_token=conn.access_token, waba_id=conn.wa_business_id
+                )
+                if app.app_id not in subscribed_ids:
+                    raise ApiError(502, "Meta did not list the app after subscription")
+        except MetaGraphError as exc:
+            raise ApiError(502, f"Meta subscription failed: {exc}") from exc
+
+        return {
+            "tenant_id": req.tenant_id,
+            "connection_id": conn.id,
+            "waba_id": conn.wa_business_id,
+            "app_id": app.app_id,
+            "webhook_subscribed": True,
+            "already_subscribed": already_subscribed,
         }
 
     async def _connection_payload(self, conn: MetaConnection, app_id: str) -> dict[str, Any]:

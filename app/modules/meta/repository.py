@@ -45,6 +45,18 @@ class MetaConnectionRepository:
         )
         return [(conn, app_id) for conn, app_id in (await self._session.execute(stmt)).all()]
 
+    async def find_by_id_in_tenant(
+        self, *, tenant_id: str, connection_id: str
+    ) -> tuple[MetaConnection, MetaApp] | None:
+        stmt = (
+            select(MetaConnection, MetaApp)
+            .join(MetaApp, MetaApp.id == MetaConnection.meta_app_id)
+            .where(MetaConnection.id == connection_id, MetaConnection.tenant_id == tenant_id)
+            .limit(1)
+        )
+        row = (await self._session.execute(stmt)).first()
+        return (row[0], row[1]) if row is not None else None
+
     async def find_context_by_tenant_id(self, tenant_id: str) -> ConnectionContext | None:
         """Nomor pengirim pesan keluar; tenant dengan lebih dari satu nomor memakai yang tertua."""
         stmt = (

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_session
 from app.modules.auth.routes import bearer_token
-from app.modules.tenant.schema import TenantDetailRequest
+from app.modules.tenant.schema import TenantConnectionSubscribeRequest, TenantDetailRequest
 from app.modules.tenant.service import TenantService
 from app.shared.response import success
 
@@ -25,5 +25,17 @@ def register_tenant_routes(rg: APIRouter, build_service: ServiceFactory) -> None
         svc: TenantService = Depends(service),
     ) -> Response:
         return success(200, "tenant retrieved successfully", await svc.details(req, token))
+
+    @router.post("/connections/subscribe")
+    async def subscribe_connection(
+        req: TenantConnectionSubscribeRequest,
+        token: str = Depends(bearer_token),
+        svc: TenantService = Depends(service),
+    ) -> Response:
+        return success(
+            200,
+            "whatsapp app subscribed successfully",
+            await svc.subscribe_connection(req, token),
+        )
 
     rg.include_router(router)

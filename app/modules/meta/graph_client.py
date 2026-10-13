@@ -36,11 +36,33 @@ class MetaGraphClient:
             for app in data.get("data") or []
         }
 
+    async def token_app_id(self, *, access_token: str) -> str:
+        data = await self._get("/app", access_token, params={"fields": "id"})
+        app_id = data.get("id")
+        if not app_id:
+            raise MetaGraphError("Meta did not return the token app ID")
+        return str(app_id)
+
+    async def subscribe_app_to_waba(self, *, access_token: str, waba_id: str) -> None:
+        data = await self._request("POST", f"/{waba_id}/subscribed_apps", access_token)
+        if data.get("success") not in (True, "true"):
+            raise MetaGraphError("Meta did not confirm the WABA subscription")
+
     async def _get(
         self, path: str, access_token: str, params: dict[str, str] | None = None
     ) -> dict[str, Any]:
+        return await self._request("GET", path, access_token, params=params)
+
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        access_token: str,
+        params: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         try:
-            response = await self._client.get(
+            response = await self._client.request(
+                method,
                 f"{self._base_url}{path}",
                 headers={"Authorization": f"Bearer {access_token}"},
                 params=params,
