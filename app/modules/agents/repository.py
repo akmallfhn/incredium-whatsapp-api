@@ -66,11 +66,7 @@ class AgentRepository:
         stmt = (
             update(Agent)
             .where(Agent.id == agent.id, Agent.tenant_id == agent.tenant_id)
-            .values(
-                **values,
-                config_version=Agent.config_version + 1,
-                updated_at=func.current_timestamp(),
-            )
+            .values(**values, config_version=Agent.config_version + 1)
             .returning(Agent)
         )
         return (
@@ -132,7 +128,7 @@ class AgentRepository:
         await self._session.execute(
             update(Agent)
             .where(Agent.id == agent_id)
-            .values(config_version=Agent.config_version + 1, updated_at=func.current_timestamp())
+            .values(config_version=Agent.config_version + 1)
         )
 
     async def active_sources(self, agent_id: str) -> list[AgentKnowledgeSource]:

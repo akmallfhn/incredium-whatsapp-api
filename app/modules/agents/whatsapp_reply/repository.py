@@ -54,7 +54,6 @@ class AgentReplyRepository:
                         (AgentReplyJob.status.in_(("failed", "send_unknown")), 0),
                         else_=AgentReplyJob.attempts,
                     ),
-                    "updated_at": func.current_timestamp(),
                 },
             )
         )
@@ -162,7 +161,7 @@ class AgentReplyRepository:
                 AgentReplyJob.due_at <= func.now(),
                 exists(authorized),
             )
-            .values(status="sending", updated_at=func.current_timestamp())
+            .values(status="sending")
             .returning(AgentReplyJob.conv_id)
         )
         return (await self._session.execute(stmt)).scalar_one_or_none() is not None
@@ -283,6 +282,6 @@ class AgentReplyRepository:
         result = await self._session.execute(
             update(WaLead)
             .where(WaLead.conv_id == job.conv_id, WaLead.mode == MODE_AI, exists(current))
-            .values(mode="human", updated_at=func.current_timestamp())
+            .values(mode="human")
         )
         return bool(result.rowcount)

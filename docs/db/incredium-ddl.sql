@@ -392,6 +392,94 @@ ALTER TABLE agent_reply_jobs ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON llm_models, agents, agent_knowledge_sources, agent_reply_jobs
   FROM anon, authenticated;
 
+---------------
+-- Functions --
+---------------
+
+CREATE OR REPLACE FUNCTION update_updated_at()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    NEW.updated_at := CURRENT_TIMESTAMP;
+    RETURN NEW;
+  END;
+$$ LANGUAGE plpgsql;
+
+--------------
+-- Triggers --
+--------------
+
+-- User data
+
+CREATE TRIGGER update_users_updated_at_trigger
+  BEFORE UPDATE ON users
+  FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at();
+
+-- Tenants
+
+CREATE TRIGGER update_tenants_updated_at_trigger
+  BEFORE UPDATE ON tenants
+  FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at();
+
+-- Meta WhatsApp connections
+
+CREATE TRIGGER update_meta_apps_updated_at_trigger
+  BEFORE UPDATE ON meta_apps
+  FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER update_meta_connections_updated_at_trigger
+  BEFORE UPDATE ON meta_connections
+  FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at();
+
+-- WhatsApp chat
+
+CREATE TRIGGER update_wa_conversations_updated_at_trigger
+  BEFORE UPDATE ON wa_conversations
+  FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER update_wa_chats_updated_at_trigger
+  BEFORE UPDATE ON wa_chats
+  FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at();
+
+-- WhatsApp leads
+
+CREATE TRIGGER update_wa_lead_stages_updated_at_trigger
+  BEFORE UPDATE ON wa_lead_stages
+  FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER update_wa_leads_updated_at_trigger
+  BEFORE UPDATE ON wa_leads
+  FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at();
+
+-- Agent balasan WhatsApp
+
+CREATE TRIGGER update_llm_models_updated_at_trigger
+  BEFORE UPDATE ON llm_models
+  FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER update_agents_updated_at_trigger
+  BEFORE UPDATE ON agents
+  FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER update_agent_knowledge_sources_updated_at_trigger
+  BEFORE UPDATE ON agent_knowledge_sources
+  FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER update_agent_reply_jobs_updated_at_trigger
+  BEFORE UPDATE ON agent_reply_jobs
+  FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at();
+
 -----------------
 -- Seed models --
 -----------------

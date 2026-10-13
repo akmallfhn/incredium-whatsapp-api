@@ -218,7 +218,7 @@ class WaConversationRepository:
         await self._session.execute(
             update(WaLead)
             .where(WaLead.conv_id == conv_id, WaLead.mode == MODE_AI)
-            .values(mode=MODE_HUMAN, updated_at=func.current_timestamp())
+            .values(mode=MODE_HUMAN)
         )
 
 
@@ -323,7 +323,6 @@ class WaChatRepository:
             # COALESCE: delivered/read/failed yang sudah datang lebih dulu tidak diturunkan ke sent.
             set_["status"] = func.coalesce(WaChat.status, stmt.excluded.status)
             set_["sent_at"] = func.coalesce(WaChat.sent_at, stmt.excluded.sent_at)
-        set_["updated_at"] = func.current_timestamp()
 
         result = await self._session.execute(
             stmt.on_conflict_do_update(index_elements=[WaChat.wam_id], set_=set_).returning(
@@ -360,7 +359,6 @@ class WaChatRepository:
                 set_={
                     "status": stmt.excluded.status,
                     timestamp_field: stmt.excluded[timestamp_field],
-                    "updated_at": func.current_timestamp(),
                 },
             )
         )
