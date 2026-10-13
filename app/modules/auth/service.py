@@ -104,6 +104,12 @@ def _user_payload(user: User, tenants: list[Tenant]) -> dict[str, Any]:
         "role": user.role,
         "status": user.status,
         "tenants": [
-            {"id": tenant.id, "name": tenant.name, "slug": tenant.slug} for tenant in tenants
+            {
+                "id": tenant.id,
+                "name": tenant.name,
+                "slug": tenant.slug,
+                "image_url": tenant.image_url,
+            }
+            for tenant in tenants
         ],
     }

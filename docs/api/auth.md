@@ -24,7 +24,7 @@ Bentuk yang sama dipakai `login`, `check-session`, dan sebagai sumber data profi
 | `avatar` | string \| null | URL foto, boleh kosong |
 | `role` | string | `Super Admin`, `Administrator`, atau `Member` |
 | `status` | string | selalu `active` di respons; user `inactive` tidak bisa login |
-| `tenants` | object[] | Tenant aktif yang boleh diakses. Bisa kosong. Setiap item berisi `id`, `name`, dan `slug`. |
+| `tenants` | object[] | Tenant aktif yang boleh diakses. Bisa kosong. Setiap item berisi `id`, `name`, `slug`, dan `image_url` (URL atau `null`). |
 
 ## Endpoints
 
@@ -77,7 +77,8 @@ Domain special-use seperti `.test`, `.local`, dan `.invalid` ditolak validator s
         {
           "id": "8yuPA4qUjqC3OfizucQoH",
           "name": "Incredium",
-          "slug": "incredium"
+          "slug": "incredium",
+          "image_url": null
         }
       ]
     }
@@ -123,7 +124,8 @@ Datanya dibaca ulang dari database tiap panggilan, bukan dari isi JWT — jadi p
       {
         "id": "8yuPA4qUjqC3OfizucQoH",
         "name": "Incredium",
-        "slug": "incredium"
+        "slug": "incredium",
+        "image_url": null
       }
     ]
   }
