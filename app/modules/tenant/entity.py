@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import CHAR, String, text
+from sqlalchemy import CHAR, String, Text, text
 from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,6 +21,8 @@ class Tenant(Base):
     id: Mapped[str] = mapped_column(CHAR(21), primary_key=True, server_default=text("nanoid()"))
     name: Mapped[str] = mapped_column(String)
     slug: Mapped[str] = mapped_column(String)
+    image_url: Mapped[str | None] = mapped_column(Text)
+    legal_name: Mapped[str | None] = mapped_column(String)
     status: Mapped[str] = mapped_column(STATUS_ENUM, server_default=text("'active'"))
     active_agent_id: Mapped[str | None] = mapped_column(CHAR(21))
     created_at: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))

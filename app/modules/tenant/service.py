@@ -1,34 +1,123 @@
 """Detail tenant beserta kesehatan koneksi WhatsApp-nya, dicek langsung ke Meta."""
 
 import asyncio
+import re
+import secrets
+import unicodedata
 from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.service import AuthService
 from app.modules.meta.entity import MetaConnection
 from app.modules.meta.graph_client import MetaGraphClient, MetaGraphError
 from app.modules.meta.repository import MetaConnectionRepository
-from app.modules.tenant.entity import STATUS_ACTIVE
+from app.modules.tenant.entity import STATUS_ACTIVE, Tenant
 from app.modules.tenant.repository import TenantRepository
-from app.modules.tenant.schema import TenantConnectionSubscribeRequest, TenantDetailRequest
+from app.modules.tenant.schema import (
+    TenantConnectionSubscribeRequest,
+    TenantCreateRequest,
+    TenantDetailRequest,
+    TenantUpdateRequest,
+)
 from app.shared.response import ApiError
 
 PHONE_STATUS_CONNECTED = "CONNECTED"
 SUBSCRIPTION_ROLES = {"Super Admin", "Administrator"}
 
 
+def _required_name(value: str) -> str:
+    name = value.strip()
+    if not name:
+        raise ApiError(400, "name is required")
+    if len(name) > 255:
+        raise ApiError(400, "name exceeds 255 characters")
+    return name
+
+
+def _legal_name(value: str | None) -> str | None:
+    name = value.strip() if value is not None else None
+    if name and len(name) > 255:
+        raise ApiError(400, "legal_name exceeds 255 characters")
+    return name or None
+
+
+def _slug(name: str) -> str:
+    ascii_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", "-", ascii_name.lower()).strip("-")[:80].rstrip("-") or "tenant"
+
+
+def _tenant_payload(tenant: Tenant) -> dict[str, Any]:
+    return {
+        "id": tenant.id,
+        "name": tenant.name,
+        "slug": tenant.slug,
+        "image_url": tenant.image_url,
+        "legal_name": tenant.legal_name,
+        "status": tenant.status,
+        "active_agent_id": tenant.active_agent_id,
+        "created_at": tenant.created_at.isoformat(),
+        "updated_at": tenant.updated_at.isoformat(),
+    }
+
+
 class TenantService:
     def __init__(
         self,
+        session: AsyncSession,
         *,
         auth: AuthService,
         tenants: TenantRepository,
         connections: MetaConnectionRepository,
         graph: MetaGraphClient,
     ) -> None:
+        self._session = session
         self._auth = auth
         self._tenants = tenants
         self._connections = connections
         self._graph = graph
+
+    async def create(self, req: TenantCreateRequest, token: str) -> dict[str, Any]:
+        user = await self._auth.authenticate(token)
+        name = _required_name(req.name)
+        base_slug = _slug(name)
+        for attempt in range(5):
+            slug = base_slug if attempt == 0 else f"{base_slug[:71]}-{secrets.token_hex(4)}"
+            tenant = await self._tenants.create(
+                name=name,
+                slug=slug,
+                image_url=str(req.image_url) if req.image_url is not None else None,
+                legal_name=_legal_name(req.legal_name),
+            )
+            if tenant is not None:
+                self._tenants.grant_access(user_id=user["id"], tenant_id=tenant.id)
+                await self._session.commit()
+                return _tenant_payload(tenant)
+        raise ApiError(409, "tenant slug is unavailable")
+
+    async def update(self, req: TenantUpdateRequest, token: str) -> dict[str, Any]:
+        user = await self._auth.authenticate(token)
+        if not req.id.strip():
+            raise ApiError(400, "id is required")
+        if not any(tenant["id"] == req.id for tenant in user["tenants"]):
+            raise ApiError(403, "tenant access denied")
+        if not req.model_fields_set.intersection({"name", "image_url", "legal_name"}):
+            raise ApiError(400, "at least one field is required")
+        tenant = await self._tenants.find_by_id(req.id)
+        if tenant is None:
+            raise ApiError(404, "tenant not found")
+
+        if "name" in req.model_fields_set:
+            if req.name is None:
+                raise ApiError(400, "name is required")
+            tenant.name = _required_name(req.name)
+        if "image_url" in req.model_fields_set:
+            tenant.image_url = str(req.image_url) if req.image_url is not None else None
+        if "legal_name" in req.model_fields_set:
+            tenant.legal_name = _legal_name(req.legal_name)
+        await self._session.commit()
+        await self._session.refresh(tenant)
+        return _tenant_payload(tenant)
 
     async def details(self, req: TenantDetailRequest, token: str) -> dict[str, Any]:
         user = await self._auth.authenticate(token)
@@ -48,6 +137,8 @@ class TenantService:
             "id": tenant.id,
             "name": tenant.name,
             "slug": tenant.slug,
+            "image_url": tenant.image_url,
+            "legal_name": tenant.legal_name,
             "status": tenant.status,
             "active_agent_id": tenant.active_agent_id,
             "connections": list(connections),

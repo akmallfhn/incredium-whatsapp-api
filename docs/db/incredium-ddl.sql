@@ -117,6 +117,8 @@ CREATE TABLE tenants (
   id               CHAR(21)     PRIMARY KEY  DEFAULT nanoid(),
   name             VARCHAR      NOT NULL,
   slug             VARCHAR      NOT NULL     UNIQUE,
+  image_url        TEXT             NULL,
+  legal_name       VARCHAR          NULL,
   status           status_enum  NOT NULL     DEFAULT 'active',
   active_agent_id  CHAR(21)         NULL,
   created_at       TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,

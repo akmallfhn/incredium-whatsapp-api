@@ -103,6 +103,7 @@ webhook_drainer = WebhookEventDrainer(
 
 def build_tenant_service(session: AsyncSession) -> TenantService:
     return TenantService(
+        session,
         auth=build_auth_service(session),
         tenants=TenantRepository(session),
         connections=MetaConnectionRepository(session),

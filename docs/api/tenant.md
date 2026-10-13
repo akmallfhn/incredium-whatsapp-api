@@ -1,6 +1,131 @@
 # Tenant
 
-Endpoint ini menampilkan data satu tenant beserta semua koneksi WhatsApp-nya di `meta_connections`, serta dapat mendaftarkan app Meta milik koneksi ke webhook WABA. Detail koneksi diperiksa langsung ke Graph API Meta pada saat permintaan, jadi hasilnya menunjukkan kondisi nyata nomor tersebut, bukan hanya isi database: apakah nomornya terhubung ke Cloud API, apakah juga dipakai di aplikasi WhatsApp Business (coexistence), dan apakah app Meta milik koneksi itu masih berlangganan webhook WABA-nya. Akses memakai JWT hasil `auth/login` dan dibatasi tenant yang tercatat di `users_access`.
+Endpoint ini membuat dan memperbarui tenant, menampilkan detail koneksi WhatsApp, serta mendaftarkan app Meta milik koneksi ke webhook WABA. Semua endpoint memakai JWT hasil `auth/login`. Pengguna yang login dapat membuat tenant dan langsung mendapat akses melalui `users_access`; endpoint lain dibatasi ke tenant yang dapat diaksesnya. Detail koneksi diperiksa langsung ke Graph API Meta pada saat permintaan.
+
+## `POST /api/v1/tenants/create`
+
+Membuat tenant aktif dan memberikan akses ke pengguna yang membuatnya dalam satu transaksi.
+
+**Method:** `POST`
+
+**Authorization:** `Bearer <jwt>` dari `POST /api/v1/auth/login`; semua pengguna yang login.
+
+**Request**
+
+```json
+{
+  "name": "TRC Brand Manager",
+  "image_url": "https://example.com/trc-logo.png",
+  "legal_name": "PT TRC Brand Manager"
+}
+```
+
+| Field | Type | Required |
+|---|---|---|
+| `name` | string, maksimal 255 karakter setelah trim | yes |
+| `image_url` | URL HTTP/HTTPS atau `null` | no |
+| `legal_name` | string, maksimal 255 karakter setelah trim, atau `null` | no |
+
+**Response** — `201 CREATED`
+
+```json
+{
+  "success": true,
+  "code": 201,
+  "status": "CREATED",
+  "message": "tenant created successfully",
+  "data": {
+    "id": "8yuPA4qUjqC3OfizucQoH",
+    "name": "TRC Brand Manager",
+    "slug": "trc-brand-manager",
+    "image_url": "https://example.com/trc-logo.png",
+    "legal_name": "PT TRC Brand Manager",
+    "status": "active",
+    "active_agent_id": null,
+    "created_at": "2026-10-13T09:00:00+00:00",
+    "updated_at": "2026-10-13T09:00:00+00:00"
+  }
+}
+```
+
+`slug` dibuat otomatis dari `name`. Jika sudah terpakai, backend menambahkan akhiran unik. `image_url` dan `legal_name` bernilai `null` bila tidak dikirim. `legal_name` kosong disimpan sebagai `null`.
+
+**Errors**
+
+| Code | Status | Message | When |
+|---|---|---|---|
+| 400 | `BAD_REQUEST` | `invalid request: <field>` | field wajib hilang, tipe salah, atau URL gambar tidak valid |
+| 400 | `BAD_REQUEST` | `name is required` | nama kosong atau hanya spasi |
+| 400 | `BAD_REQUEST` | `name exceeds 255 characters` | nama terlalu panjang |
+| 400 | `BAD_REQUEST` | `legal_name exceeds 255 characters` | nama legal terlalu panjang |
+| 401 | `UNAUTHORIZED` | `missing or invalid authorization header` | JWT hilang, tidak sah, kedaluwarsa, dicabut, atau pengguna nonaktif |
+| 409 | `CONFLICT` | `tenant slug is unavailable` | slug masih bertabrakan setelah beberapa percobaan |
+| 500 | `INTERNAL_SERVER_ERROR` | `an unexpected error occurred` | konfigurasi autentikasi atau database bermasalah |
+
+## `POST /api/v1/tenants/update`
+
+Memperbarui satu atau beberapa informasi tenant yang dapat diakses pengguna.
+
+**Method:** `POST`
+
+**Authorization:** `Bearer <jwt>` dari `POST /api/v1/auth/login`; semua pengguna yang punya akses tenant.
+
+**Request**
+
+```json
+{
+  "id": "8yuPA4qUjqC3OfizucQoH",
+  "name": "TRC Creative",
+  "image_url": null,
+  "legal_name": "PT TRC Creative Indonesia"
+}
+```
+
+| Field | Type | Required |
+|---|---|---|
+| `id` | string | yes |
+| `name` | string, maksimal 255 karakter setelah trim | no |
+| `image_url` | URL HTTP/HTTPS atau `null` | no |
+| `legal_name` | string, maksimal 255 karakter setelah trim, atau `null` | no |
+
+**Response** — `200 OK`
+
+```json
+{
+  "success": true,
+  "code": 200,
+  "status": "OK",
+  "message": "tenant updated successfully",
+  "data": {
+    "id": "8yuPA4qUjqC3OfizucQoH",
+    "name": "TRC Creative",
+    "slug": "trc-brand-manager",
+    "image_url": null,
+    "legal_name": "PT TRC Creative Indonesia",
+    "status": "active",
+    "active_agent_id": null,
+    "created_at": "2026-10-13T09:00:00+00:00",
+    "updated_at": "2026-10-13T09:10:00+00:00"
+  }
+}
+```
+
+Field yang tidak dikirim tetap seperti sebelumnya. Kirim `null` untuk menghapus `image_url` atau `legal_name`. `name` tidak boleh `null`. Perubahan `name` tidak mengubah `slug`, karena slug dipakai sebagai folder media di Storage.
+
+**Errors**
+
+| Code | Status | Message | When |
+|---|---|---|---|
+| 400 | `BAD_REQUEST` | `invalid request: <field>` | field wajib hilang, tipe salah, atau URL gambar tidak valid |
+| 400 | `BAD_REQUEST` | `id is required` | ID kosong atau hanya spasi |
+| 400 | `BAD_REQUEST` | `at least one field is required` | hanya `id` yang dikirim |
+| 400 | `BAD_REQUEST` | `name is required` | `name` dikirim sebagai `null`, kosong, atau hanya spasi |
+| 400 | `BAD_REQUEST` | `name exceeds 255 characters` | nama terlalu panjang |
+| 400 | `BAD_REQUEST` | `legal_name exceeds 255 characters` | nama legal terlalu panjang |
+| 401 | `UNAUTHORIZED` | `missing or invalid authorization header` | JWT hilang, tidak sah, kedaluwarsa, dicabut, atau pengguna nonaktif |
+| 403 | `FORBIDDEN` | `tenant access denied` | pengguna tidak punya akses ke tenant ini atau tenant nonaktif |
+| 404 | `NOT_FOUND` | `tenant not found` | tenant yang dapat diakses tidak ditemukan |
+| 500 | `INTERNAL_SERVER_ERROR` | `an unexpected error occurred` | konfigurasi autentikasi atau database bermasalah |
 
 ## `POST /api/v1/tenants/details`
 
@@ -34,6 +159,8 @@ Mengembalikan detail satu tenant dan status setiap koneksi WhatsApp-nya menurut 
     "id": "8yuPA4qUjqC3OfizucQoH",
     "name": "TRC Brand Manager",
     "slug": "trc-brand-manager",
+    "image_url": "https://example.com/trc-logo.png",
+    "legal_name": "PT TRC Brand Manager",
     "status": "active",
     "active_agent_id": null,
     "connections": [
