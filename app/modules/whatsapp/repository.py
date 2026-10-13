@@ -167,14 +167,19 @@ class WaConversationRepository:
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
     async def find_or_create(
-        self, *, tenant_id: str, full_name: str, phone_number: str
+        self, *, tenant_id: str, meta_connection_id: str, full_name: str, phone_number: str
     ) -> WaConversation:
-        """Upsert; sandarkan ke unique (tenant_id, phone_number) karena event Meta bisa balapan."""
+        """Upsert per nomor bisnis dan pelanggan agar event Meta yang balapan tetap satu thread."""
         stmt = (
             pg_insert(WaConversation)
-            .values(tenant_id=tenant_id, full_name=full_name, phone_number=phone_number)
+            .values(
+                tenant_id=tenant_id,
+                meta_connection_id=meta_connection_id,
+                full_name=full_name,
+                phone_number=phone_number,
+            )
             .on_conflict_do_update(
-                index_elements=[WaConversation.tenant_id, WaConversation.phone_number],
+                index_elements=[WaConversation.meta_connection_id, WaConversation.phone_number],
                 set_={
                     "full_name": func.coalesce(
                         func.nullif(pg_insert(WaConversation).excluded.full_name, ""),

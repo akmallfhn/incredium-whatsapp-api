@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import CHAR, ForeignKey, String, Text, text
+from sqlalchemy import CHAR, ForeignKey, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,6 +31,7 @@ class MetaConnection(Base):
     """Satu WABA milik tenant; satu baris satu nomor WhatsApp Business."""
 
     __tablename__ = "meta_connections"
+    __table_args__ = (UniqueConstraint("tenant_id", "id"),)
 
     id: Mapped[str] = mapped_column(CHAR(21), primary_key=True, server_default=text("nanoid()"))
     tenant_id: Mapped[str] = mapped_column(CHAR(21), ForeignKey("tenants.id"))

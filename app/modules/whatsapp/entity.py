@@ -1,7 +1,18 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CHAR, BigInteger, Boolean, ForeignKey, SmallInteger, String, Text, text
+from sqlalchemy import (
+    CHAR,
+    BigInteger,
+    Boolean,
+    ForeignKey,
+    ForeignKeyConstraint,
+    SmallInteger,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import ENUM, JSON, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -82,12 +93,20 @@ CHAT_STATUS_ENUM = ENUM(
 
 
 class WaConversation(Base):
-    """Satu thread WhatsApp antara tenant dan satu nomor pelanggan; hanya fakta dari webhook."""
+    """Satu thread antara satu koneksi WhatsApp bisnis dan satu nomor pelanggan."""
 
     __tablename__ = "wa_conversations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "meta_connection_id"],
+            ["meta_connections.tenant_id", "meta_connections.id"],
+        ),
+        UniqueConstraint("meta_connection_id", "phone_number"),
+    )
 
     id: Mapped[str] = mapped_column(CHAR(21), primary_key=True, server_default=text("nanoid()"))
     tenant_id: Mapped[str] = mapped_column(CHAR(21), ForeignKey("tenants.id"))
+    meta_connection_id: Mapped[str | None] = mapped_column(CHAR(21))
     full_name: Mapped[str] = mapped_column(String)
     phone_number: Mapped[str] = mapped_column(String)
     last_read_id: Mapped[str | None] = mapped_column(CHAR(21))

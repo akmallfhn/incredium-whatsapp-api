@@ -149,20 +149,24 @@ CREATE TABLE meta_connections (
   token_expires_at    TIMESTAMPTZ      NULL,
   status              status_enum  NOT NULL     DEFAULT 'active',
   created_at          TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
-  updated_at          TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP
+  updated_at          TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (tenant_id, id)
 );
 
 -- WhatsApp chat
 
+-- Kolom koneksi nullable dan unique lama dipertahankan sampai semua worker memakai skema baru.
 CREATE TABLE wa_conversations (
-  id            CHAR(21)     PRIMARY KEY  DEFAULT nanoid(),
-  tenant_id     CHAR(21)     NOT NULL,
-  full_name     VARCHAR      NOT NULL,
-  phone_number  VARCHAR      NOT NULL,
-  last_read_id  CHAR(21)         NULL,
-  created_at    TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
-  updated_at    TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (tenant_id, phone_number)
+  id                  CHAR(21)     PRIMARY KEY  DEFAULT nanoid(),
+  tenant_id           CHAR(21)     NOT NULL,
+  meta_connection_id  CHAR(21)         NULL,
+  full_name           VARCHAR      NOT NULL,
+  phone_number        VARCHAR      NOT NULL,
+  last_read_id        CHAR(21)         NULL,
+  created_at          TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  updated_at          TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (tenant_id, phone_number),
+  UNIQUE (meta_connection_id, phone_number)
 );
 
 CREATE TABLE wa_chats (
@@ -277,10 +281,11 @@ CREATE TABLE agent_knowledge_sources (
   CHECK (kind IN ('text', 'url', 'file'))
 );
 
+-- Kolom nomor lama nullable selama rollout; worker baru membaca koneksi dari wa_conversations.
 CREATE TABLE agent_reply_jobs (
   conv_id                 CHAR(21)      PRIMARY KEY,
   latest_inbound_chat_id  CHAR(21)      NOT NULL,
-  wa_phone_number_id      VARCHAR       NOT NULL,
+  wa_phone_number_id      VARCHAR           NULL,
   generation              BIGINT        NOT NULL     DEFAULT 1,
   claimed_generation      BIGINT            NULL,
   due_at                  TIMESTAMPTZ   NOT NULL,
@@ -317,6 +322,7 @@ ALTER TABLE meta_connections
 
 ALTER TABLE wa_conversations
   ADD FOREIGN KEY (tenant_id)    REFERENCES tenants (id),
+  ADD FOREIGN KEY (tenant_id, meta_connection_id) REFERENCES meta_connections (tenant_id, id),
   ADD FOREIGN KEY (last_read_id) REFERENCES wa_chats (id);
 
 ALTER TABLE wa_chats
@@ -373,6 +379,7 @@ CREATE INDEX meta_connections_meta_app_id_idx  ON meta_connections (meta_app_id)
 -- WhatsApp chat
 
 CREATE INDEX wa_conversations_tenant_id_idx   ON wa_conversations (tenant_id);
+CREATE INDEX wa_conversations_tenant_meta_connection_idx ON wa_conversations (tenant_id, meta_connection_id);
 CREATE INDEX wa_conversations_full_name_trgm_idx  ON wa_conversations USING gin (full_name gin_trgm_ops);
 CREATE INDEX wa_chats_message_trgm_idx           ON wa_chats USING gin (message gin_trgm_ops);
 CREATE INDEX wa_chats_conv_id_created_at_idx  ON wa_chats (conv_id, created_at DESC);

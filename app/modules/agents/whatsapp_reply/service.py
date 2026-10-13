@@ -176,8 +176,10 @@ class AgentReplyWorker:
                 if await repo.mode(job.conv_id) != "ai":
                     return None
                 await self._cache.set_ai_mode(job.conv_id)
-            connection = await MetaConnectionRepository(session).find_context_by_phone_number_id(
-                job.wa_phone_number_id
+            if not conv.meta_connection_id:
+                raise RuntimeError("conversation has no WhatsApp connection")
+            connection = await MetaConnectionRepository(session).find_context_by_id(
+                conv.meta_connection_id
             )
             if connection is None or connection.tenant_id != conv.tenant_id:
                 raise RuntimeError("WhatsApp connection not active for conversation tenant")

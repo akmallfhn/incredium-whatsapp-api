@@ -20,19 +20,17 @@ class ClaimedReply:
     conv_id: str
     generation: int
     latest_inbound_chat_id: str
-    wa_phone_number_id: str
 
 
 class AgentReplyRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def enqueue(self, *, conv_id: str, chat_id: str, wa_phone_number_id: str) -> None:
+    async def enqueue(self, *, conv_id: str, chat_id: str) -> None:
         due_at = func.current_timestamp() + text("INTERVAL '2 seconds'")
         stmt = pg_insert(AgentReplyJob).values(
             conv_id=conv_id,
             latest_inbound_chat_id=chat_id,
-            wa_phone_number_id=wa_phone_number_id,
             due_at=due_at,
             status="pending",
         )
@@ -41,7 +39,6 @@ class AgentReplyRepository:
                 index_elements=[AgentReplyJob.conv_id],
                 set_={
                     "latest_inbound_chat_id": stmt.excluded.latest_inbound_chat_id,
-                    "wa_phone_number_id": stmt.excluded.wa_phone_number_id,
                     "generation": AgentReplyJob.generation + 1,
                     "due_at": stmt.excluded.due_at,
                     "status": case(
@@ -85,10 +82,7 @@ class AgentReplyRepository:
             row.attempts += 1
         await self._session.flush()
         return [
-            ClaimedReply(
-                row.conv_id, row.generation, row.latest_inbound_chat_id, row.wa_phone_number_id
-            )
-            for row in rows
+            ClaimedReply(row.conv_id, row.generation, row.latest_inbound_chat_id) for row in rows
         ]
 
     async def conversation(self, conv_id: str) -> WaConversation | None:

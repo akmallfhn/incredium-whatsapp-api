@@ -191,7 +191,7 @@ class WhatsAppWebhookService:
             try:
                 await self._append_inbound_chat(
                     tenant_id=ctx.tenant_id,
-                    wa_phone_number_id=ctx.phone_number_id,
+                    meta_connection_id=ctx.connection_id,
                     full_name=full_name,
                     phone_number=msg.get("from", ""),
                     wam_id=wam_id,
@@ -210,7 +210,7 @@ class WhatsAppWebhookService:
         self,
         *,
         tenant_id: str,
-        wa_phone_number_id: str,
+        meta_connection_id: str,
         full_name: str,
         phone_number: str,
         wam_id: str,
@@ -221,7 +221,10 @@ class WhatsAppWebhookService:
         context_wam_id: str | None,
     ) -> None:
         conv = await self._conversations.find_or_create(
-            tenant_id=tenant_id, full_name=full_name, phone_number=phone_number
+            tenant_id=tenant_id,
+            meta_connection_id=meta_connection_id,
+            full_name=full_name,
+            phone_number=phone_number,
         )
 
         reply_to_id = None
@@ -241,9 +244,7 @@ class WhatsAppWebhookService:
             created_at=unix_to_datetime(sent_at_unix),
         )
         if inserted:
-            await self._replies.enqueue(
-                conv_id=conv.id, chat_id=chat_id, wa_phone_number_id=wa_phone_number_id
-            )
+            await self._replies.enqueue(conv_id=conv.id, chat_id=chat_id)
 
     # --- Echo pesan yang dikirim staff dari WhatsApp Business App (coexistence) ---
     async def _handle_echoes(self, ctx: ConnectionContext, value: dict[str, Any]) -> None:
@@ -258,7 +259,10 @@ class WhatsAppWebhookService:
             attachment = await self._resolve_attachment(ctx, msg_type, echo)
             try:
                 conv = await self._conversations.find_or_create(
-                    tenant_id=ctx.tenant_id, full_name="", phone_number=echo.get("to", "")
+                    tenant_id=ctx.tenant_id,
+                    meta_connection_id=ctx.connection_id,
+                    full_name="",
+                    phone_number=echo.get("to", ""),
                 )
                 await self._replies.lock_for_echo(conv.id)
                 # Meta tidak pernah mengirim status sent untuk pesan dari app; echo itulah buktinya.
@@ -291,6 +295,7 @@ class WhatsAppWebhookService:
             try:
                 await self._update_status(
                     tenant_id=ctx.tenant_id,
+                    meta_connection_id=ctx.connection_id,
                     phone_number=status.get("recipient_id", ""),
                     wam_id=wam_id,
                     status=status.get("status", ""),
@@ -305,6 +310,7 @@ class WhatsAppWebhookService:
         self,
         *,
         tenant_id: str,
+        meta_connection_id: str,
         phone_number: str,
         wam_id: str,
         status: str,
@@ -325,7 +331,10 @@ class WhatsAppWebhookService:
 
         # Pesan keluar lewat WhatsApp Business App (coexistence) yang belum pernah tercatat.
         conv = await self._conversations.find_or_create(
-            tenant_id=tenant_id, full_name="", phone_number=phone_number
+            tenant_id=tenant_id,
+            meta_connection_id=meta_connection_id,
+            full_name="",
+            phone_number=phone_number,
         )
         # Upsert, bukan insert: echo pesan ini bisa menyusul dan harus mengisi baris yang sama.
         await self._chats.upsert_status(
@@ -505,7 +514,7 @@ class WhatsAppInboxService:
         if _window_expired(last_inbound_at, datetime.now(timezone.utc)):
             raise ApiError(409, "customer service window has expired")
 
-        ctx = await self._connections.find_context_by_tenant_id(conv.tenant_id)
+        ctx = await self._connections.find_context_by_id(conv.meta_connection_id)
         if ctx is None or not ctx.access_token:
             raise ApiError(409, "tenant has no active whatsapp connection")
 
@@ -562,6 +571,7 @@ def _conversation_payload(row: ConversationRow, now: datetime) -> dict[str, Any]
     return {
         "id": conv.id,
         "tenant_id": conv.tenant_id,
+        "meta_connection_id": conv.meta_connection_id,
         "full_name": conv.full_name,
         "phone_number": conv.phone_number,
         "last_read_id": conv.last_read_id,

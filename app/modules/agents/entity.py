@@ -47,7 +47,6 @@ class AgentReplyJob(Base):
         CHAR(21), ForeignKey("wa_conversations.id"), primary_key=True
     )
     latest_inbound_chat_id: Mapped[str] = mapped_column(CHAR(21), ForeignKey("wa_chats.id"))
-    wa_phone_number_id: Mapped[str] = mapped_column(String)
     generation: Mapped[int] = mapped_column(BigInteger, server_default=text("1"))
     claimed_generation: Mapped[int | None] = mapped_column(BigInteger)
     due_at: Mapped[datetime]

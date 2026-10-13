@@ -13,6 +13,7 @@ class ConnectionContext:
     """Semua yang dibutuhkan pemroses webhook untuk satu event, hasil satu kali query."""
 
     tenant_id: str
+    connection_id: str
     tenant_slug: str
     phone_number_id: str
     access_token: str
@@ -57,32 +58,13 @@ class MetaConnectionRepository:
         row = (await self._session.execute(stmt)).first()
         return (row[0], row[1]) if row is not None else None
 
-    async def find_context_by_tenant_id(self, tenant_id: str) -> ConnectionContext | None:
-        """Nomor pengirim pesan keluar; tenant dengan lebih dari satu nomor memakai yang tertua."""
-        stmt = (
-            select(
-                MetaConnection.tenant_id,
-                Tenant.slug,
-                MetaConnection.wa_phone_number_id,
-                MetaConnection.access_token,
-            )
-            .join(Tenant, Tenant.id == MetaConnection.tenant_id)
-            .where(
-                MetaConnection.tenant_id == tenant_id,
-                MetaConnection.status == STATUS_ACTIVE,
-                Tenant.status == STATUS_ACTIVE,
-            )
-            .order_by(MetaConnection.created_at)
-            .limit(1)
-        )
-        return _to_context((await self._session.execute(stmt)).first())
-
     async def find_context_by_phone_number_id(
         self, phone_number_id: str
     ) -> ConnectionContext | None:
         """Routing multitenant: nomor tujuan di event Meta menentukan tenant dan token-nya."""
         stmt = (
             select(
+                MetaConnection.id.label("connection_id"),
                 MetaConnection.tenant_id,
                 Tenant.slug,
                 MetaConnection.wa_phone_number_id,
@@ -98,12 +80,32 @@ class MetaConnectionRepository:
         )
         return _to_context((await self._session.execute(stmt)).first())
 
+    async def find_context_by_id(self, connection_id: str) -> ConnectionContext | None:
+        stmt = (
+            select(
+                MetaConnection.id.label("connection_id"),
+                MetaConnection.tenant_id,
+                Tenant.slug,
+                MetaConnection.wa_phone_number_id,
+                MetaConnection.access_token,
+            )
+            .join(Tenant, Tenant.id == MetaConnection.tenant_id)
+            .where(
+                MetaConnection.id == connection_id,
+                MetaConnection.status == STATUS_ACTIVE,
+                Tenant.status == STATUS_ACTIVE,
+            )
+            .limit(1)
+        )
+        return _to_context((await self._session.execute(stmt)).first())
+
 
 def _to_context(row: Row[Any] | None) -> ConnectionContext | None:
     if row is None:
         return None
     return ConnectionContext(
         tenant_id=row.tenant_id,
+        connection_id=row.connection_id,
         tenant_slug=row.slug or row.tenant_id,
         phone_number_id=row.wa_phone_number_id,
         access_token=row.access_token or "",
