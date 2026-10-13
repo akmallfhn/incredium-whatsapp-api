@@ -169,7 +169,7 @@ Detail endpoint-nya di [docs/api/auth.md](docs/api/auth.md).
 - **Kredensial melekat ke levelnya masing-masing**: `app_secret` dan `webhook_verify_token`
   milik App (`meta_apps`), `access_token` milik WABA (`meta_connections`). Rotasi app secret
   jadi satu baris, bukan satu baris per tenant.
-- **Conversation di-upsert**, bersandar pada unique constraint `(tenant_id, phone_number)`.
+- **Conversation di-upsert**, bersandar pada unique constraint `(meta_connection_id, phone_number)`.
   Meta bisa mengirim beberapa event untuk kontak baru yang sama secara bersamaan, jadi
   cek-lalu-insert tidak aman. Nama profil di-refresh, kecuali event-nya memang tidak membawa
   nama (echo & status) — supaya nama yang sudah ada tidak tertimpa string kosong.

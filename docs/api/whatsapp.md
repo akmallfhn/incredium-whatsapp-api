@@ -273,7 +273,7 @@ Mengirim balasan teks ke kontak sebuah percakapan lewat WhatsApp Cloud API, lalu
 }
 ```
 
-Bentuk `data` sama dengan item `POST /api/v1/whatsapp/chats`. `201` berarti Meta sudah menerima pesannya, belum berarti terkirim ke kontak: `status` biasanya masih `null`, lalu diisi `sent`, `delivered`, `read`, atau `failed` oleh webhook status. Pesan dikirim dari nomor `meta_connections` aktif milik tenant percakapan; kalau tenant punya lebih dari satu nomor, yang dipakai adalah koneksi yang paling lama dibuat. `message` dipangkas spasinya di awal dan akhir sebelum dikirim. Saat ini hanya pesan teks yang didukung.
+Bentuk `data` sama dengan item `POST /api/v1/whatsapp/chats`. `201` berarti Meta sudah menerima pesannya, belum berarti terkirim ke kontak: `status` biasanya masih `null`, lalu diisi `sent`, `delivered`, `read`, atau `failed` oleh webhook status. Pesan dikirim dari nomor `meta_connections` yang ditunjuk oleh `wa_conversations.meta_connection_id`; koneksi tersebut harus aktif. `message` dipangkas spasinya di awal dan akhir sebelum dikirim. Saat ini hanya pesan teks yang didukung.
 
 **Errors**
 
