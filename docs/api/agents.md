@@ -168,7 +168,7 @@ Membuat draf agent dengan nama dan tenant tanpa langsung memilihnya sebagai agen
 | `tenant_id` | string | yes |
 | `name` | string | yes |
 
-Tambahkan model, prompt, dan kondisi transfer melalui endpoint `update` sebelum memilih agent aktif.
+Tambahkan model, kepribadian, prompt, dan kondisi transfer melalui endpoint `update` sebelum memilih agent aktif.
 
 **Response:** `201 CREATED`
 
@@ -238,7 +238,7 @@ Memperbarui konfigurasi, termasuk kepribadian dan latar agent, serta menaikkan `
 | `system_prompt` | string atau `null` | no |
 | `transfer_conditions` | string atau `null` | no |
 
-`model_id`, `system_prompt`, dan `transfer_conditions` boleh `null` pada agent yang belum aktif. Teks kosong dinormalisasi menjadi `null`. Jika agent sedang aktif, hasil perubahan wajib tetap memiliki model, prompt, dan kondisi transfer yang tidak kosong. `personality` tetap opsional dan dapat berisi identitas, pengalaman, serta gaya bicara agent. Nama dari field `name` dan isi `personality` masuk ke konteks LangGraph.
+`model_id`, `personality`, `system_prompt`, dan `transfer_conditions` boleh `null` pada agent yang belum aktif. Teks kosong dinormalisasi menjadi `null`. Jika agent sedang aktif, hasil perubahan wajib tetap memiliki model, kepribadian, prompt, dan kondisi transfer yang tidak kosong. `personality` berisi identitas, pengalaman, serta gaya bicara agent. Nama dari field `name` dan isi `personality` masuk ke konteks LangGraph.
 
 **Response:** `200 OK`
 
@@ -365,7 +365,7 @@ Memilih satu agent milik tenant atau mengirim `null` untuk mematikan balasan AI 
 | `tenant_id` | string | yes |
 | `agent_id` | string atau `null` | yes |
 
-Field `agent_id` wajib dikirim. Nilai `null` menonaktifkan balasan AI untuk tenant. Agent yang dipilih wajib memiliki `model_id`, `system_prompt`, dan `transfer_conditions` yang tidak kosong; memilih agent tidak mengubah mode `human` pada percakapan yang sudah diambil alih staf.
+Field `agent_id` wajib dikirim. Nilai `null` menonaktifkan balasan AI untuk tenant. Agent yang dipilih wajib memiliki `model_id`, `personality`, `system_prompt`, dan `transfer_conditions` yang tidak kosong; memilih agent tidak mengubah mode `human` pada percakapan yang sudah diambil alih staf.
 
 **Response:** `200 OK`
 
@@ -388,7 +388,7 @@ Field `agent_id` wajib dikirim. Nilai `null` menonaktifkan balasan AI untuk tena
 |---|---|---|---|
 | 400 | BAD_REQUEST | `invalid request: <field>` | Field wajib hilang atau tipe/nilai tidak sesuai |
 | 400 | BAD_REQUEST | `tenant_id is required` | ID tenant kosong atau hanya spasi |
-| 400 | BAD_REQUEST | `<field> is required for active agent` | Model, prompt, atau kondisi transfer belum lengkap |
+| 400 | BAD_REQUEST | `<field> is required for active agent` | Model, kepribadian, prompt, atau kondisi transfer belum lengkap |
 | 400 | BAD_REQUEST | `model provider is not supported` | Integrasi provider model belum tersedia di worker |
 | 401 | UNAUTHORIZED | `missing or invalid authorization header` | JWT hilang, tidak sah, kedaluwarsa, atau dicabut |
 | 403 | FORBIDDEN | `tenant access denied` | Pengguna tidak punya akses tenant |

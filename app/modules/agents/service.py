@@ -204,7 +204,7 @@ class AgentService:
         model_id = values.get("model_id", agent.model_id)
         if model_id is None:
             raise ApiError(400, "model_id is required for active agent")
-        for field in ("system_prompt", "transfer_conditions"):
+        for field in ("personality", "system_prompt", "transfer_conditions"):
             value = values.get(field, getattr(agent, field))
             if not value or not value.strip():
                 raise ApiError(400, f"{field} is required for active agent")
