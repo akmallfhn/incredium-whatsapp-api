@@ -2,10 +2,9 @@
 
 from typing import Any
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.agents.entity import Agent, AgentKnowledgeSource, LlmModel
+from app.modules.agents.entity import Agent, AgentKnowledgeSource
 from app.modules.agents.repository import AgentRepository
 from app.modules.agents.schema import (
     AgentCreateRequest,
@@ -19,10 +18,11 @@ from app.modules.agents.schema import (
     KnowledgeDetailsRequest,
     KnowledgeListRequest,
     KnowledgeUpdateRequest,
-    ModelCreateRequest,
-    ModelListRequest,
 )
 from app.modules.auth.service import AuthService
+from app.modules.llm.entity import LlmModel
+from app.modules.llm.payload import model_payload
+from app.modules.llm.repository import LlmRepository
 from app.shared import pagination
 from app.shared.agent_cache import AgentCache
 from app.shared.response import ApiError
@@ -39,23 +39,12 @@ def _required(value: str, field: str, maximum: int | None = None) -> str:
     return result
 
 
-def _model_payload(model: LlmModel) -> dict[str, Any]:
-    return {
-        "id": model.id,
-        "provider": model.provider,
-        "api_model": model.api_model,
-        "display_name": model.display_name,
-        "created_at": model.created_at.isoformat(),
-        "updated_at": model.updated_at.isoformat(),
-    }
-
-
 def _agent_payload(agent: Agent, model: LlmModel, active_id: str | None) -> dict[str, Any]:
     return {
         "id": agent.id,
         "tenant_id": agent.tenant_id,
         "model_id": agent.model_id,
-        "model": _model_payload(model),
+        "model": model_payload(model),
         "name": agent.name,
         "system_prompt": agent.system_prompt,
         "transfer_conditions": agent.transfer_conditions,
@@ -87,11 +76,13 @@ class AgentService:
         *,
         auth: AuthService,
         repo: AgentRepository,
+        models: LlmRepository,
         cache: AgentCache,
     ) -> None:
         self._session = session
         self._auth = auth
         self._repo = repo
+        self._models = models
         self._cache = cache
 
     async def _access(self, token: str, tenant_id: str, *, write: bool = False) -> None:
@@ -101,32 +92,6 @@ class AgentService:
             raise ApiError(403, "tenant access denied")
         if write and user["role"] not in WRITE_ROLES:
             raise ApiError(403, "agent management denied")
-
-    async def models(self, req: ModelListRequest, token: str) -> dict[str, Any]:
-        await self._auth.authenticate(token)
-        page, size = pagination.normalize(req.page, req.page_size)
-        total = await self._repo.count_models()
-        rows = await self._repo.list_models(limit=size, skip=pagination.offset(page, size))
-        return {
-            "list": [_model_payload(row) for row in rows],
-            "metapaging": pagination.meta(total, page, size),
-        }
-
-    async def create_model(self, req: ModelCreateRequest, token: str) -> dict[str, Any]:
-        user = await self._auth.authenticate(token)
-        if user["role"] != "Super Admin":
-            raise ApiError(403, "model management denied")
-        try:
-            model = await self._repo.create_model(
-                provider=req.provider,
-                api_model=_required(req.api_model, "api_model", 100),
-                display_name=_required(req.display_name, "display_name", 100),
-            )
-            await self._session.commit()
-        except IntegrityError as exc:
-            await self._session.rollback()
-            raise ApiError(409, "model already exists") from exc
-        return _model_payload(model)
 
     async def list_agents(self, req: AgentListRequest, token: str) -> dict[str, Any]:
         await self._access(token, req.tenant_id)
@@ -146,15 +111,18 @@ class AgentService:
     async def details(self, req: AgentDetailsRequest, token: str) -> dict[str, Any]:
         await self._access(token, req.tenant_id)
         agent = await self._agent(req.tenant_id, req.id)
-        model = await self._repo.find_model(agent.model_id)
+        model = await self._models.find_model(agent.model_id)
         tenant = await self._repo.tenant(req.tenant_id)
         assert model is not None and tenant is not None
         return _agent_payload(agent, model, tenant.active_agent_id)
 
     async def create(self, req: AgentCreateRequest, token: str) -> dict[str, Any]:
         await self._access(token, req.tenant_id, write=True)
-        if await self._repo.find_model(req.model_id) is None:
+        model = await self._models.find_model(req.model_id)
+        if model is None:
             raise ApiError(404, "model not found")
+        if model.provider.api_provider not in {"openai", "deepseek"}:
+            raise ApiError(400, "model provider is not supported")
         agent = await self._repo.create_agent(
             tenant_id=req.tenant_id,
             model_id=req.model_id,
@@ -163,7 +131,7 @@ class AgentService:
             transfer_conditions=req.transfer_conditions.strip(),
         )
         await self._session.commit()
-        model = await self._repo.find_model(agent.model_id)
+        model = await self._models.find_model(agent.model_id)
         assert model is not None
         return _agent_payload(agent, model, None)
 
@@ -178,8 +146,11 @@ class AgentService:
             if value is None:
                 raise ApiError(400, f"{field} cannot be null")
             if field == "model_id":
-                if await self._repo.find_model(value) is None:
+                model = await self._models.find_model(value)
+                if model is None:
                     raise ApiError(404, "model not found")
+                if model.provider.api_provider not in {"openai", "deepseek"}:
+                    raise ApiError(400, "model provider is not supported")
                 changes[field] = value
             elif field == "transfer_conditions":
                 changes[field] = value.strip()
@@ -190,7 +161,7 @@ class AgentService:
         agent = await self._repo.update_agent(agent, **changes)
         await self._session.commit()
         await self._cache.delete_agent(req.tenant_id)
-        model = await self._repo.find_model(agent.model_id)
+        model = await self._models.find_model(agent.model_id)
         tenant = await self._repo.tenant(req.tenant_id)
         assert model is not None and tenant is not None
         return _agent_payload(agent, model, tenant.active_agent_id)

@@ -7,25 +7,12 @@ from app.db.base import Base
 from app.modules.tenant.entity import STATUS_ENUM
 
 
-class LlmModel(Base):
-    __tablename__ = "llm_models"
-
-    id: Mapped[str] = mapped_column(CHAR(21), primary_key=True, server_default=text("nanoid()"))
-    provider: Mapped[str] = mapped_column(String(20))
-    api_model: Mapped[str] = mapped_column(String(100))
-    display_name: Mapped[str] = mapped_column(String(100))
-    created_at: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))
-    updated_at: Mapped[datetime] = mapped_column(
-        server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP")
-    )
-
-
 class Agent(Base):
     __tablename__ = "agents"
 
     id: Mapped[str] = mapped_column(CHAR(21), primary_key=True, server_default=text("nanoid()"))
     tenant_id: Mapped[str] = mapped_column(CHAR(21), ForeignKey("tenants.id"))
-    model_id: Mapped[str] = mapped_column(CHAR(21), ForeignKey("llm_models.id"))
+    model_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("llm_models.id"))
     name: Mapped[str] = mapped_column(String(100))
     system_prompt: Mapped[str] = mapped_column(Text)
     transfer_conditions: Mapped[str] = mapped_column(Text, server_default=text("''"))

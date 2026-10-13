@@ -21,6 +21,9 @@ from app.modules.auth.repository import AuthRepository
 from app.modules.auth.routes import register_auth_routes
 from app.modules.auth.service import AuthService
 from app.modules.health.routes import register_health_routes
+from app.modules.llm.repository import LlmRepository
+from app.modules.llm.routes import register_llm_routes
+from app.modules.llm.service import LlmService
 from app.modules.meta.graph_client import MetaGraphClient
 from app.modules.meta.repository import MetaConnectionRepository
 from app.modules.stat.repository import StatRepository
@@ -55,8 +58,13 @@ def build_agent_service(session: AsyncSession) -> AgentService:
         session,
         auth=build_auth_service(session),
         repo=AgentRepository(session),
+        models=LlmRepository(session),
         cache=AgentCache(http_client()),
     )
+
+
+def build_llm_service(session: AsyncSession) -> LlmService:
+    return LlmService(session, auth=build_auth_service(session), repo=LlmRepository(session))
 
 
 def build_whatsapp_service(session: AsyncSession) -> WhatsAppWebhookService:
@@ -162,6 +170,7 @@ def create_app() -> FastAPI:
     register_stat_routes(api, build_stat_service)
     register_tenant_routes(api, build_tenant_service)
     register_agent_routes(api, build_agent_service)
+    register_llm_routes(api, build_llm_service)
     app.include_router(api)
 
     return app

@@ -16,8 +16,6 @@ from app.modules.agents.schema import (
     KnowledgeDetailsRequest,
     KnowledgeListRequest,
     KnowledgeUpdateRequest,
-    ModelCreateRequest,
-    ModelListRequest,
 )
 from app.modules.agents.service import AgentService
 from app.modules.auth.routes import bearer_token
@@ -31,22 +29,6 @@ def register_agent_routes(rg: APIRouter, build_service: ServiceFactory) -> None:
 
     def service(session: AsyncSession = Depends(get_session)) -> AgentService:
         return build_service(session)
-
-    @router.post("/models")
-    async def models(
-        req: ModelListRequest,
-        token: str = Depends(bearer_token),
-        svc: AgentService = Depends(service),
-    ) -> Response:
-        return success(200, "models retrieved successfully", await svc.models(req, token))
-
-    @router.post("/models/create")
-    async def create_model(
-        req: ModelCreateRequest,
-        token: str = Depends(bearer_token),
-        svc: AgentService = Depends(service),
-    ) -> Response:
-        return success(201, "model created successfully", await svc.create_model(req, token))
 
     @router.post("/list")
     async def list_agents(

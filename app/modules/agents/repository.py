@@ -3,7 +3,8 @@ from typing import Any
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.agents.entity import Agent, AgentKnowledgeSource, LlmModel
+from app.modules.agents.entity import Agent, AgentKnowledgeSource
+from app.modules.llm.entity import LlmModel
 from app.modules.tenant.entity import Tenant
 from app.modules.whatsapp.entity import WaChat
 
@@ -11,29 +12,6 @@ from app.modules.whatsapp.entity import WaChat
 class AgentRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
-
-    async def count_models(self) -> int:
-        return (
-            await self._session.execute(select(func.count()).select_from(LlmModel))
-        ).scalar_one()
-
-    async def list_models(self, *, limit: int, skip: int) -> list[LlmModel]:
-        stmt = (
-            select(LlmModel)
-            .order_by(LlmModel.provider, LlmModel.display_name)
-            .limit(limit)
-            .offset(skip)
-        )
-        return list((await self._session.execute(stmt)).scalars().all())
-
-    async def find_model(self, model_id: str) -> LlmModel | None:
-        return await self._session.get(LlmModel, model_id)
-
-    async def create_model(self, *, provider: str, api_model: str, display_name: str) -> LlmModel:
-        model = LlmModel(provider=provider, api_model=api_model, display_name=display_name)
-        self._session.add(model)
-        await self._session.flush()
-        return model
 
     async def count_agents(self, tenant_id: str) -> int:
         stmt = select(func.count()).select_from(Agent).where(Agent.tenant_id == tenant_id)

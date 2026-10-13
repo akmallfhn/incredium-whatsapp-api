@@ -230,21 +230,30 @@ CREATE TABLE wa_leads (
 
 -- Agent balasan WhatsApp
 
-CREATE TABLE llm_models (
-  id            CHAR(21)      PRIMARY KEY  DEFAULT nanoid(),
-  provider      VARCHAR(20)   NOT NULL,
-  api_model     VARCHAR(100)  NOT NULL,
+CREATE TABLE llm_provider (
+  id            BIGSERIAL     PRIMARY KEY,
+  api_provider  VARCHAR(20)   NOT NULL  UNIQUE,
   display_name  VARCHAR(100)  NOT NULL,
+  image_url     TEXT              NULL,
+  created_at    TIMESTAMPTZ   NOT NULL     DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMPTZ   NOT NULL     DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE llm_models (
+  id            BIGSERIAL     PRIMARY KEY,
+  provider_id   BIGINT        NOT NULL,
+  display_name  VARCHAR(100)  NOT NULL,
+  api_model     VARCHAR(100)  NOT NULL,
+  description   TEXT              NULL,
   created_at    TIMESTAMPTZ   NOT NULL     DEFAULT CURRENT_TIMESTAMP,
   updated_at    TIMESTAMPTZ   NOT NULL     DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (provider, api_model),
-  CHECK (provider IN ('openai', 'deepseek'))
+  UNIQUE (provider_id, api_model)
 );
 
 CREATE TABLE agents (
   id                   CHAR(21)      PRIMARY KEY  DEFAULT nanoid(),
   tenant_id            CHAR(21)      NOT NULL,
-  model_id             CHAR(21)      NOT NULL,
+  model_id             BIGINT        NOT NULL,
   name                 VARCHAR(100)  NOT NULL,
   system_prompt        TEXT          NOT NULL,
   transfer_conditions  TEXT          NOT NULL     DEFAULT '',
@@ -327,6 +336,9 @@ ALTER TABLE wa_leads
 
 -- Agent balasan WhatsApp
 
+ALTER TABLE llm_models
+  ADD FOREIGN KEY (provider_id) REFERENCES llm_provider (id);
+
 ALTER TABLE agents
   ADD FOREIGN KEY (tenant_id) REFERENCES tenants (id),
   ADD FOREIGN KEY (model_id)  REFERENCES llm_models (id);
@@ -382,17 +394,19 @@ CREATE INDEX agents_tenant_id_idx ON agents (tenant_id);
 CREATE INDEX agents_model_id_idx ON agents (model_id);
 CREATE INDEX agent_knowledge_sources_agent_status_idx ON agent_knowledge_sources (agent_id, status);
 CREATE INDEX agent_reply_jobs_due_idx ON agent_reply_jobs (due_at) WHERE status = 'pending';
-CREATE INDEX agent_reply_jobs_claimed_idx ON agent_reply_jobs (claimed_at)
-  WHERE status = 'processing';
+CREATE INDEX agent_reply_jobs_claimed_idx ON agent_reply_jobs (claimed_at) WHERE status = 'processing';
 CREATE INDEX wa_chats_agent_id_idx ON wa_chats (agent_id) WHERE agent_id IS NOT NULL;
 
+ALTER TABLE llm_provider ENABLE ROW LEVEL SECURITY;
 ALTER TABLE llm_models ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agent_knowledge_sources ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agent_reply_jobs ENABLE ROW LEVEL SECURITY;
 
-REVOKE ALL ON llm_models, agents, agent_knowledge_sources, agent_reply_jobs
+REVOKE ALL ON llm_provider, llm_models, agents, agent_knowledge_sources, agent_reply_jobs
   FROM anon, authenticated;
+
+REVOKE ALL ON SEQUENCE llm_provider_id_seq, llm_models_id_seq FROM anon, authenticated;
 
 ---------------
 -- Functions --
@@ -462,6 +476,11 @@ CREATE TRIGGER update_wa_leads_updated_at_trigger
 
 -- Agent balasan WhatsApp
 
+CREATE TRIGGER update_llm_provider_updated_at_trigger
+  BEFORE UPDATE ON llm_provider
+  FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at();
+
 CREATE TRIGGER update_llm_models_updated_at_trigger
   BEFORE UPDATE ON llm_models
   FOR EACH ROW
@@ -482,10 +501,13 @@ CREATE TRIGGER update_agent_reply_jobs_updated_at_trigger
   FOR EACH ROW
     EXECUTE FUNCTION update_updated_at();
 
------------------
--- Seed models --
------------------
+-------------------
+-- Seed providers --
+-------------------
 
-INSERT INTO llm_models (provider, api_model, display_name) VALUES
-  ('openai', 'gpt-4.1-mini', 'GPT-4.1 mini'),
-  ('openai', 'gpt-4.1', 'GPT-4.1');
+INSERT INTO llm_provider (api_provider, display_name, image_url) VALUES
+  ('openai', 'ChatGPT', 'https://zxsbslyyzdpkqwwelgzp.supabase.co/storage/v1/object/public/pureva/llm/provider/icon_gpt.svg'),
+  ('deepseek', 'DeepSeek', 'https://zxsbslyyzdpkqwwelgzp.supabase.co/storage/v1/object/public/pureva/llm/provider/icon_deepseek.svg'),
+  ('anthropic', 'Claude', 'https://zxsbslyyzdpkqwwelgzp.supabase.co/storage/v1/object/public/pureva/llm/provider/icon_claude.svg'),
+  ('moonshot', 'Kimi', 'https://zxsbslyyzdpkqwwelgzp.supabase.co/storage/v1/object/public/pureva/llm/provider/icon_kimi.svg'),
+  ('google_genai', 'Gemini', 'https://zxsbslyyzdpkqwwelgzp.supabase.co/storage/v1/object/public/pureva/llm/provider/icon_gemini.svg');

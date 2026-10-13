@@ -3,17 +3,6 @@ from typing import Literal
 from pydantic import BaseModel
 
 
-class ModelListRequest(BaseModel):
-    page: int = 1
-    page_size: int = 20
-
-
-class ModelCreateRequest(BaseModel):
-    provider: Literal["openai", "deepseek"]
-    api_model: str
-    display_name: str
-
-
 class AgentListRequest(BaseModel):
     tenant_id: str
     page: int = 1
@@ -27,7 +16,7 @@ class AgentDetailsRequest(BaseModel):
 
 class AgentCreateRequest(BaseModel):
     tenant_id: str
-    model_id: str
+    model_id: int
     name: str
     system_prompt: str
     transfer_conditions: str = ""
@@ -36,7 +25,7 @@ class AgentCreateRequest(BaseModel):
 class AgentUpdateRequest(BaseModel):
     tenant_id: str
     id: str
-    model_id: str | None = None
+    model_id: int | None = None
     name: str | None = None
     system_prompt: str | None = None
     transfer_conditions: str | None = None

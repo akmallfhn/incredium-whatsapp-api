@@ -10,7 +10,7 @@ Postgres via Supabase. Deployed on Railway.
 
 ## Stack
 
-Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-settings, httpx. LangGraph + LangChain run the WhatsApp reply agent; its provider and model come from `llm_models`, while API keys stay in environment. `uv` for dependencies, `ruff` for lint and format.
+Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-settings, httpx. LangGraph + LangChain run the WhatsApp reply agent; its provider and model come from `llm_provider` and `llm_models`, while API keys stay in environment. `uv` for dependencies, `ruff` for lint and format.
 
 ## Running locally
 
@@ -30,7 +30,8 @@ Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-se
 | `tenant` | Tenant creation and updates with per-user access, lookup by id, live connection health, and an authorized endpoint to subscribe a connection's app to its WABA — see `docs/api/tenant.md` |
 | `meta` | Meta App credentials (`meta_apps`) and per-tenant WABA connections (`meta_connections`); resolves a webhook's `phone_number_id` to its tenant and access token; `graph_client.py` reads phone number status and manages WABA webhook subscriptions |
 | `health` | Liveness and database reachability |
-| `agents` | Agent and knowledge CRUD, model catalog, active-agent selection, and durable LangGraph reply worker |
+| `agents` | Agent and knowledge CRUD, active-agent selection, and durable LangGraph reply worker |
+| `llm` | Provider and model catalog, including the `/api/v1/llm` endpoints |
 | `shared` | Response envelope, `ApiError`, Bearer auth, pagination, shared httpx client, Meta signature verification, bcrypt/JWT primitives, Supabase Storage client |
 | `core`, `db` | Settings and the lazy async engine/session factory |
 
@@ -57,7 +58,7 @@ Python 3.12+, FastAPI, SQLAlchemy 2 async (`asyncpg`), Pydantic v2 + pydantic-se
 **The schema is never generated from this code.** SQLAlchemy emits no DDL, so a schema change has to land in **two** places or things drift:
 
 1. The live Supabase project, via the `apply_migration` MCP tool.
-2. `docs/db/incredium-ddl.sql` — the only SQL file in `docs/db/`, a hand-maintained reference DDL in the same format as `ordina-ddl.sql`. It includes initial seed data. It is documentation, not a migration runner; apply changes to the live project through the migration tool without keeping separate SQL migration files in this repo.
+2. `docs/db/incredium-ddl.sql` — the only SQL file in `docs/db/`, a hand-maintained reference DDL in the same format as `ordina-ddl.sql`. It is documentation, not a migration runner; apply changes to the live project through the migration tool without keeping separate SQL migration files in this repo.
 
 The SQLAlchemy entities are a read-write mirror of that DDL, which is why their enums use `create_type=False`. Note that `id` defaults depend on a `nanoid()` function existing in the database.
 
@@ -65,7 +66,7 @@ Two Postgres details that have already cost time: enums cannot drop labels, so c
 
 ## Agents
 
-The WhatsApp reply agent lives in `app/modules/agents/whatsapp_reply/` and is documented in `docs/agents/README.md`. `app/modules/agents/llm.py` is the shared provider factory; the chosen model comes from `llm_models`, and credentials stay in environment. Read the agent rules before adding another one. LLM latency belongs in its own sweeper, never in the request that answers Meta.
+The WhatsApp reply agent lives in `app/modules/agents/whatsapp_reply/` and is documented in `docs/agents/README.md`. `app/modules/agents/llm.py` is the shared provider factory; the catalog lives in `app/modules/llm/`, and credentials stay in environment. Read the agent rules before adding another one. LLM latency belongs in its own sweeper, never in the request that answers Meta.
 
 ## Known gaps
 

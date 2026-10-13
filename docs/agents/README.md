@@ -8,7 +8,7 @@ Agent automation Incredium berjalan di pekerja terpisah dari respons webhook Met
 
 ## Aturan bersama
 
-- Provider dan ID model agent balasan berasal dari `llm_models`; API key tetap dari environment. `app/modules/agents/llm.py` adalah factory bersama.
+- Provider berasal dari `llm_provider`, ID model dari `llm_models`, dan API key tetap dari environment. Katalog dikelola modul `app/modules/llm/`; `app/modules/agents/llm.py` adalah factory bersama.
 - Panggilan LLM tidak berjalan sebelum webhook menjawab Meta dan tidak memakai session transaksi webhook.
 - Kegagalan node LangGraph dicatat di state atau status job tanpa membatalkan penyimpanan chat.
 - Token keluaran dibatasi di kode dan perlu dievaluasi terhadap jawaban WhatsApp terpanjang yang realistis.

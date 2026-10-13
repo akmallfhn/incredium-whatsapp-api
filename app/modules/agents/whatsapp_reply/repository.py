@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.agents.entity import Agent, AgentReplyJob
+from app.modules.llm.entity import LlmModel
 from app.modules.tenant.entity import STATUS_ACTIVE, Tenant
 from app.modules.whatsapp.entity import MODE_AI, WaConversation, WaLead
 
@@ -113,8 +114,6 @@ class AgentReplyRepository:
         return value is True
 
     async def active_config(self, tenant_id: str) -> dict | None:
-        from app.modules.agents.entity import LlmModel
-
         stmt = (
             select(Agent, LlmModel)
             .join(Tenant, Tenant.active_agent_id == Agent.id)
@@ -132,7 +131,7 @@ class AgentReplyRepository:
             "name": agent.name,
             "system_prompt": agent.system_prompt,
             "transfer_conditions": agent.transfer_conditions,
-            "provider": model.provider,
+            "provider": model.provider.api_provider,
             "api_model": model.api_model,
         }
 
