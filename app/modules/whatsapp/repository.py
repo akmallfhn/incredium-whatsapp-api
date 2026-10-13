@@ -9,6 +9,9 @@ from sqlalchemy.orm import aliased
 
 from app.modules.tenant.entity import STATUS_ACTIVE, Tenant
 from app.modules.whatsapp.entity import (
+    CHAT_STATUS_DELIVERED,
+    CHAT_STATUS_FAILED,
+    CHAT_STATUS_READ,
     CHAT_STATUS_SENT,
     DIRECTION_INBOUND,
     DIRECTION_OUTBOUND,
@@ -30,6 +33,17 @@ from app.modules.whatsapp.entity import (
 )
 
 LIKE_ESCAPE = "\\"
+
+
+def _next_chat_status(current: Any, incoming: Any) -> Any:
+    return case(
+        (current == CHAT_STATUS_READ, current),
+        (incoming == CHAT_STATUS_READ, incoming),
+        (current == CHAT_STATUS_DELIVERED, current),
+        (incoming == CHAT_STATUS_DELIVERED, incoming),
+        (current == CHAT_STATUS_FAILED, current),
+        else_=incoming,
+    )
 
 
 @dataclass(frozen=True)
@@ -346,7 +360,7 @@ class WaChatRepository:
         timestamp_field: str,
         occurred_at: datetime,
     ) -> None:
-        """Status untuk pesan yang belum tercatat; echo yang menyusul mengisi baris yang sama."""
+        """Status tidak mundur walau webhook datang ulang atau diproses bersamaan."""
         stmt = pg_insert(WaChat).values(
             conv_id=conv_id,
             wam_id=wam_id,
@@ -362,7 +376,7 @@ class WaChatRepository:
             stmt.on_conflict_do_update(
                 index_elements=[WaChat.wam_id],
                 set_={
-                    "status": stmt.excluded.status,
+                    "status": _next_chat_status(WaChat.status, stmt.excluded.status),
                     timestamp_field: stmt.excluded[timestamp_field],
                 },
             )

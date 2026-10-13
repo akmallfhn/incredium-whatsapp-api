@@ -2,6 +2,8 @@
 
 Endpoint ini membaca percakapan dan chat WhatsApp, menandai percakapan sudah dibaca, mengirim balasan teks, serta menerima verifikasi dan event webhook dari Meta. Endpoint daftar memakai JWT hasil `auth/login` dan membatasi data menurut akses tenant pengguna yang tersimpan di `users_access`; callback Meta memakai verify token atau signature milik `meta_apps` sesuai `app_id` pada URL.
 
+Perubahan pada `wa_chats` disiarkan oleh trigger database ke kanal privat Supabase Realtime `wa:tenant:<tenant_id>:chats` dengan event `chat_changed`. Payload hanya berisi `chat_id`, `conv_id`, `operation` (`INSERT` atau `UPDATE`), `status`, dan `updated_at`; isi pesan tidak dikirim. Pengiriman event terjadi dalam transaksi yang sama, sehingga rollback tidak menerbitkan perubahan. Trigger mengabaikan kegagalan Realtime agar penyimpanan pesan dan status webhook tetap berjalan. Dashboard memeriksa sesi dan akses tenant di endpoint streaming Next.js, lalu membaca ulang data melalui endpoint di bawah ini setelah menerima event. Jangan mengekspos service role key atau tabel `wa_chats` langsung ke browser.
+
 ## `POST /api/v1/whatsapp/conversations`
 
 Mengembalikan percakapan milik satu tenant yang cocok dengan filter, diurutkan seperti inbox WhatsApp: `last_message_at` terbaru di atas, dengan `id` sebagai pemecah waktu yang sama. Percakapan tanpa chat memakai `created_at`-nya sebagai pengganti.

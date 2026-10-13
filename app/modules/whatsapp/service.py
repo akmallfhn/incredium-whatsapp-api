@@ -324,21 +324,20 @@ class WhatsAppWebhookService:
         timestamp_field = _STATUS_TIMESTAMP_FIELD[mapped]
 
         chat = await self._chats.find_by_wam_id(wam_id)
-        if chat is not None:
-            chat.status = mapped
-            setattr(chat, timestamp_field, updated_at)
-            return
-
-        # Pesan keluar lewat WhatsApp Business App (coexistence) yang belum pernah tercatat.
-        conv = await self._conversations.find_or_create(
-            tenant_id=tenant_id,
-            meta_connection_id=meta_connection_id,
-            full_name="",
-            phone_number=phone_number,
-        )
+        if chat is None:
+            # Pesan keluar lewat WhatsApp Business App (coexistence) yang belum pernah tercatat.
+            conv = await self._conversations.find_or_create(
+                tenant_id=tenant_id,
+                meta_connection_id=meta_connection_id,
+                full_name="",
+                phone_number=phone_number,
+            )
+            conv_id = conv.id
+        else:
+            conv_id = chat.conv_id
         # Upsert, bukan insert: echo pesan ini bisa menyusul dan harus mengisi baris yang sama.
         await self._chats.upsert_status(
-            conv_id=conv.id,
+            conv_id=conv_id,
             wam_id=wam_id,
             status=mapped,
             timestamp_field=timestamp_field,

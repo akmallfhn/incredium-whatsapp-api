@@ -466,6 +466,51 @@ CREATE TRIGGER update_wa_chats_updated_at_trigger
   FOR EACH ROW
     EXECUTE FUNCTION update_updated_at();
 
+-- Siarkan perubahan chat ke kanal privat tenant setelah transaksi berhasil.
+CREATE SCHEMA incredium_private;
+REVOKE ALL ON SCHEMA incredium_private FROM PUBLIC;
+
+CREATE FUNCTION incredium_private.broadcast_wa_chat_change()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  chat_tenant_id text;
+BEGIN
+  SELECT tenant_id INTO chat_tenant_id
+  FROM public.wa_conversations
+  WHERE id = NEW.conv_id;
+
+  IF chat_tenant_id IS NOT NULL THEN
+    PERFORM realtime.send(
+      jsonb_build_object(
+        'chat_id', NEW.id,
+        'conv_id', NEW.conv_id,
+        'operation', TG_OP,
+        'status', NEW.status,
+        'updated_at', NEW.updated_at
+      ),
+      'chat_changed',
+      'wa:tenant:' || chat_tenant_id || ':chats',
+      true
+    );
+  END IF;
+  RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'Gagal menyiarkan perubahan wa_chats: %', SQLERRM;
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION incredium_private.broadcast_wa_chat_change() FROM PUBLIC;
+
+CREATE TRIGGER broadcast_wa_chat_change_trigger
+  AFTER INSERT OR UPDATE ON wa_chats
+  FOR EACH ROW
+    EXECUTE FUNCTION incredium_private.broadcast_wa_chat_change();
+
 -- WhatsApp leads
 
 CREATE TRIGGER update_wa_lead_stages_updated_at_trigger
