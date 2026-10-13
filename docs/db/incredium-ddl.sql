@@ -142,7 +142,7 @@ CREATE TABLE meta_connections (
   id                  CHAR(21)     PRIMARY KEY  DEFAULT nanoid(),
   tenant_id           CHAR(21)     NOT NULL,
   meta_app_id         CHAR(21)     NOT NULL,
-  wa_business_id      VARCHAR      NOT NULL     UNIQUE,
+  wa_business_id      VARCHAR      NOT NULL,
   wa_phone_number_id  VARCHAR      NOT NULL     UNIQUE,
   display_number      VARCHAR          NULL,
   access_token        TEXT             NULL,
@@ -155,17 +155,15 @@ CREATE TABLE meta_connections (
 
 -- WhatsApp chat
 
--- Kolom koneksi nullable dan unique lama dipertahankan sampai semua worker memakai skema baru.
 CREATE TABLE wa_conversations (
   id                  CHAR(21)     PRIMARY KEY  DEFAULT nanoid(),
   tenant_id           CHAR(21)     NOT NULL,
-  meta_connection_id  CHAR(21)         NULL,
+  meta_connection_id  CHAR(21)     NOT NULL,
   full_name           VARCHAR      NOT NULL,
   phone_number        VARCHAR      NOT NULL,
   last_read_id        CHAR(21)         NULL,
   created_at          TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
   updated_at          TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (tenant_id, phone_number),
   UNIQUE (meta_connection_id, phone_number)
 );
 
@@ -281,11 +279,9 @@ CREATE TABLE agent_knowledge_sources (
   CHECK (kind IN ('text', 'url', 'file'))
 );
 
--- Kolom nomor lama nullable selama rollout; worker baru membaca koneksi dari wa_conversations.
 CREATE TABLE agent_reply_jobs (
   conv_id                 CHAR(21)      PRIMARY KEY,
   latest_inbound_chat_id  CHAR(21)      NOT NULL,
-  wa_phone_number_id      VARCHAR           NULL,
   generation              BIGINT        NOT NULL     DEFAULT 1,
   claimed_generation      BIGINT            NULL,
   due_at                  TIMESTAMPTZ   NOT NULL,

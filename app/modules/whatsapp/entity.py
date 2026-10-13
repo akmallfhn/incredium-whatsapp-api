@@ -106,7 +106,7 @@ class WaConversation(Base):
 
     id: Mapped[str] = mapped_column(CHAR(21), primary_key=True, server_default=text("nanoid()"))
     tenant_id: Mapped[str] = mapped_column(CHAR(21), ForeignKey("tenants.id"))
-    meta_connection_id: Mapped[str | None] = mapped_column(CHAR(21))
+    meta_connection_id: Mapped[str] = mapped_column(CHAR(21))
     full_name: Mapped[str] = mapped_column(String)
     phone_number: Mapped[str] = mapped_column(String)
     last_read_id: Mapped[str | None] = mapped_column(CHAR(21))

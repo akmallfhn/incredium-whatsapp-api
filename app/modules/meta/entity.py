@@ -28,7 +28,7 @@ class MetaApp(Base):
 
 
 class MetaConnection(Base):
-    """Satu WABA milik tenant; satu baris satu nomor WhatsApp Business."""
+    """Satu nomor WhatsApp Business milik tenant; satu WABA boleh punya beberapa nomor."""
 
     __tablename__ = "meta_connections"
     __table_args__ = (UniqueConstraint("tenant_id", "id"),)
