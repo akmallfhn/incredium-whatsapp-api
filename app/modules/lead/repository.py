@@ -30,6 +30,14 @@ class LeadRepository:
             )
         )
 
+    async def stage_by_id(self, tenant_id: str, stage_id: str) -> WaLeadStage | None:
+        return await self._session.scalar(
+            select(WaLeadStage).where(
+                WaLeadStage.tenant_id == tenant_id,
+                WaLeadStage.id == stage_id,
+            )
+        )
+
     async def stages(self, tenant_id: str, limit: int, skip: int) -> tuple[int, list[WaLeadStage]]:
         condition = (WaLeadStage.tenant_id == tenant_id, WaLeadStage.status == STATUS_ACTIVE)
         total = await self._session.scalar(

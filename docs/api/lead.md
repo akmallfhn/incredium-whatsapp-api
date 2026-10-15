@@ -64,7 +64,7 @@ Mengambil stage aktif milik tenant sesuai urutan pipeline untuk pilihan pada for
 
 ## `POST /api/v1/leads/details`
 
-Mengambil data lead untuk satu percakapan WhatsApp.
+Mengambil data lead untuk satu percakapan WhatsApp, termasuk nama dan deskripsi stage yang terhubung.
 
 **Method:** `POST`
 
@@ -93,6 +93,8 @@ Mengambil data lead untuk satu percakapan WhatsApp.
   "data": {
     "conv_id": "fF4vJ2lA8sTrN0qLmP5xB",
     "stage_id": "Qm3vX8pL2nR6tY9wK4sJd",
+    "stage_name": "Qualified",
+    "stage_desc": "Lead sudah memenuhi kriteria awal.",
     "handler_id": null,
     "mode": "ai",
     "note": null,
@@ -101,6 +103,8 @@ Mengambil data lead untuk satu percakapan WhatsApp.
   }
 }
 ```
+
+`stage_name` dan `stage_desc` bernilai `null` jika lead belum memiliki stage; stage yang sudah tidak aktif tetap ditampilkan bila masih terhubung ke lead.
 
 | Code | Status | Message | When |
 |---|---|---|---|
@@ -162,7 +166,7 @@ Mengubah mode lead secara eksplisit menjadi `ai` atau `human`.
 
 ## `POST /api/v1/leads/update`
 
-Memperbarui handler, catatan, atau stage lead; field yang tidak dikirim tetap seperti semula dan `null` mengosongkan field.
+Memperbarui handler, catatan, atau stage lead dan mengembalikan nama serta deskripsi stage terbarunya; field yang tidak dikirim tetap seperti semula dan `null` mengosongkan field.
 
 **Method:** `POST`
 
@@ -197,6 +201,8 @@ Memperbarui handler, catatan, atau stage lead; field yang tidak dikirim tetap se
   "data": {
     "conv_id": "fF4vJ2lA8sTrN0qLmP5xB",
     "stage_id": "Qm3vX8pL2nR6tY9wK4sJd",
+    "stage_name": "Qualified",
+    "stage_desc": "Lead sudah memenuhi kriteria awal.",
     "handler_id": "c595537e-40f6-42a5-a629-dcd925cf87ca",
     "mode": "human",
     "note": "Pasien menunggu jadwal konsultasi",
@@ -205,6 +211,8 @@ Memperbarui handler, catatan, atau stage lead; field yang tidak dikirim tetap se
   }
 }
 ```
+
+`stage_name` dan `stage_desc` bernilai `null` jika `stage_id` dikosongkan; stage yang sudah tidak aktif tetap ditampilkan bila masih terhubung ke lead.
 
 | Code | Status | Message | When |
 |---|---|---|---|

@@ -127,7 +127,7 @@ class WaLeadStage(Base):
     key: Mapped[str] = mapped_column(String)
     name: Mapped[str] = mapped_column(String)
     # Kriteria tahap ini dalam bahasa manusia; jadi bahan prompt agent penilai lead.
-    description: Mapped[str | None] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(String)
     position: Mapped[int] = mapped_column(SmallInteger)
     status: Mapped[str] = mapped_column(STATUS_ENUM, server_default=text("'active'"))
     created_at: Mapped[datetime] = mapped_column(server_default=text("CURRENT_TIMESTAMP"))

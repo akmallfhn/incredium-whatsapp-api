@@ -221,7 +221,7 @@ CREATE TABLE wa_lead_stages (
   tenant_id    CHAR(21)     NOT NULL,
   key          VARCHAR      NOT NULL,
   name         VARCHAR      NOT NULL,
-  description  TEXT             NULL,
+  description  VARCHAR          NULL,
   position     SMALLINT     NOT NULL,
   status       status_enum  NOT NULL     DEFAULT 'active',
   created_at   TIMESTAMPTZ  NOT NULL     DEFAULT CURRENT_TIMESTAMP,

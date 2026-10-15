@@ -10,7 +10,7 @@ from app.modules.lead.schema import (
     LeadStageListRequest,
     LeadUpdateRequest,
 )
-from app.modules.whatsapp.entity import WaConversation, WaLead
+from app.modules.whatsapp.entity import WaConversation, WaLead, WaLeadStage
 from app.shared import pagination
 from app.shared.response import ApiError
 
@@ -24,6 +24,14 @@ def _lead_payload(lead: WaLead) -> dict[str, Any]:
         "note": lead.note,
         "created_at": lead.created_at.isoformat(),
         "updated_at": lead.updated_at.isoformat(),
+    }
+
+
+def _lead_stage_payload(lead: WaLead, stage: WaLeadStage | None) -> dict[str, Any]:
+    return {
+        **_lead_payload(lead),
+        "stage_name": stage.name if stage is not None else None,
+        "stage_desc": stage.description if stage is not None else None,
     }
 
 
@@ -55,11 +63,16 @@ class LeadService:
         return _lead_payload(lead)
 
     async def details(self, req: LeadDetailsRequest, token: str) -> dict[str, Any]:
-        await self._conversation(req.conv_id, token)
+        conversation = await self._conversation(req.conv_id, token)
         lead = await self._leads.find(req.conv_id)
         if lead is None:
             raise ApiError(404, "lead not found")
-        return _lead_payload(lead)
+        stage = (
+            await self._leads.stage_by_id(conversation.tenant_id, lead.stage_id)
+            if lead.stage_id is not None
+            else None
+        )
+        return _lead_stage_payload(lead, stage)
 
     async def stages(self, req: LeadStageListRequest, token: str) -> dict[str, Any]:
         user = await self._auth.authenticate(token)
@@ -112,4 +125,9 @@ class LeadService:
             lead.note = req.note
         await self._session.commit()
         await self._session.refresh(lead)
-        return _lead_payload(lead)
+        stage = (
+            await self._leads.stage_by_id(conversation.tenant_id, lead.stage_id)
+            if lead.stage_id is not None
+            else None
+        )
+        return _lead_stage_payload(lead, stage)
