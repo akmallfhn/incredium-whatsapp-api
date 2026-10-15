@@ -102,6 +102,7 @@ class WaConversation(Base):
             ["meta_connections.tenant_id", "meta_connections.id"],
         ),
         UniqueConstraint("meta_connection_id", "phone_number"),
+        UniqueConstraint("tenant_id", "id"),
     )
 
     id: Mapped[str] = mapped_column(CHAR(21), primary_key=True, server_default=text("nanoid()"))

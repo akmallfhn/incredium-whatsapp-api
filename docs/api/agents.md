@@ -6,7 +6,8 @@ Endpoint ini mengelola agent balasan WhatsApp, sumber pengetahuan, dan pilihan a
 
 Mengembalikan agent milik tenant, termasuk penanda agent yang sedang dipilih.
 
-**Method:** `POST /api/v1/agents/list`  
+**Method:** `POST /api/v1/agents`
+
 **Authorization:** Bearer JWT, akses tenant
 
 **Request**
@@ -400,7 +401,8 @@ Field `agent_id` wajib dikirim. Nilai `null` menonaktifkan balasan AI untuk tena
 
 Mengembalikan sumber pengetahuan milik satu agent secara berpaginasi.
 
-**Method:** `POST /api/v1/agents/knowledge/list`  
+**Method:** `POST /api/v1/agents/knowledge-sources`
+
 **Authorization:** Bearer JWT, akses tenant
 
 **Request**

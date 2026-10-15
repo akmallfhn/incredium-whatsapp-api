@@ -30,7 +30,7 @@ def register_agent_routes(rg: APIRouter, build_service: ServiceFactory) -> None:
     def service(session: AsyncSession = Depends(get_session)) -> AgentService:
         return build_service(session)
 
-    @router.post("/list")
+    @router.post("")
     async def list_agents(
         req: AgentListRequest,
         token: str = Depends(bearer_token),
@@ -80,7 +80,7 @@ def register_agent_routes(rg: APIRouter, build_service: ServiceFactory) -> None:
             200, "active agent updated successfully", await svc.select_active(req, token)
         )
 
-    @router.post("/knowledge/list")
+    @router.post("/knowledge-sources")
     async def list_sources(
         req: KnowledgeListRequest,
         token: str = Depends(bearer_token),

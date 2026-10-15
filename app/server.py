@@ -21,11 +21,17 @@ from app.modules.auth.repository import AuthRepository
 from app.modules.auth.routes import register_auth_routes
 from app.modules.auth.service import AuthService
 from app.modules.health.routes import register_health_routes
+from app.modules.lead.repository import LeadRepository
+from app.modules.lead.routes import register_lead_routes
+from app.modules.lead.service import LeadService
 from app.modules.llm.repository import LlmRepository
 from app.modules.llm.routes import register_llm_routes
 from app.modules.llm.service import LlmService
 from app.modules.meta.graph_client import MetaGraphClient
 from app.modules.meta.repository import MetaConnectionRepository
+from app.modules.patient.repository import PatientRepository
+from app.modules.patient.routes import register_patient_routes
+from app.modules.patient.service import PatientService
 from app.modules.stat.repository import StatRepository
 from app.modules.stat.routes import register_stat_routes
 from app.modules.stat.service import StatService
@@ -123,6 +129,16 @@ def build_stat_service(session: AsyncSession) -> StatService:
     return StatService(stats=StatRepository(session), tenants=TenantRepository(session))
 
 
+def build_patient_service(session: AsyncSession) -> PatientService:
+    return PatientService(
+        session, auth=build_auth_service(session), patients=PatientRepository(session)
+    )
+
+
+def build_lead_service(session: AsyncSession) -> LeadService:
+    return LeadService(session, auth=build_auth_service(session), leads=LeadRepository(session))
+
+
 async def validation_error_handler(request: Request, exc: RequestValidationError):
     """Samakan bentuk error validasi dengan envelope, bukan 422 bawaan FastAPI."""
     field = ".".join(str(p) for p in exc.errors()[0]["loc"][1:]) or "request body"
@@ -169,6 +185,8 @@ def create_app() -> FastAPI:
     )
     register_stat_routes(api, build_stat_service)
     register_tenant_routes(api, build_tenant_service)
+    register_patient_routes(api, build_patient_service)
+    register_lead_routes(api, build_lead_service)
     register_agent_routes(api, build_agent_service)
     register_llm_routes(api, build_llm_service)
     app.include_router(api)
