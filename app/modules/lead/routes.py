@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_session
 from app.modules.auth.routes import bearer_token
-from app.modules.lead.schema import LeadChangeModeRequest, LeadUpdateRequest
+from app.modules.lead.schema import LeadChangeModeRequest, LeadDetailsRequest, LeadUpdateRequest
 from app.modules.lead.service import LeadService
 from app.shared.response import success
 
@@ -25,6 +25,14 @@ def register_lead_routes(rg: APIRouter, build_service: ServiceFactory) -> None:
         svc: LeadService = Depends(service),
     ) -> Response:
         return success(200, "lead mode updated successfully", await svc.change_mode(req, token))
+
+    @router.post("/details")
+    async def details(
+        req: LeadDetailsRequest,
+        token: str = Depends(bearer_token),
+        svc: LeadService = Depends(service),
+    ) -> Response:
+        return success(200, "lead retrieved successfully", await svc.details(req, token))
 
     @router.post("/update")
     async def update(

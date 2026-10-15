@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.service import AuthService
 from app.modules.lead.repository import LeadRepository
-from app.modules.lead.schema import LeadChangeModeRequest, LeadUpdateRequest
+from app.modules.lead.schema import LeadChangeModeRequest, LeadDetailsRequest, LeadUpdateRequest
 from app.modules.whatsapp.entity import WaConversation, WaLead
 from app.shared.response import ApiError
 
@@ -46,6 +46,13 @@ class LeadService:
         lead.mode = req.mode
         await self._session.commit()
         await self._session.refresh(lead)
+        return _lead_payload(lead)
+
+    async def details(self, req: LeadDetailsRequest, token: str) -> dict[str, Any]:
+        await self._conversation(req.conv_id, token)
+        lead = await self._leads.find(req.conv_id)
+        if lead is None:
+            raise ApiError(404, "lead not found")
         return _lead_payload(lead)
 
     async def update(self, req: LeadUpdateRequest, token: str) -> dict[str, Any]:

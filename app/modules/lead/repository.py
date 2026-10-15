@@ -18,6 +18,9 @@ class LeadRepository:
             select(WaLead).where(WaLead.conv_id == conv_id).with_for_update()
         )
 
+    async def find(self, conv_id: str) -> WaLead | None:
+        return await self._session.get(WaLead, conv_id)
+
     async def stage(self, tenant_id: str, stage_id: str) -> WaLeadStage | None:
         return await self._session.scalar(
             select(WaLeadStage).where(

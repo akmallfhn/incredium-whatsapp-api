@@ -9,6 +9,10 @@ class LeadChangeModeRequest(BaseModel):
     mode: Literal["ai", "human"]
 
 
+class LeadDetailsRequest(BaseModel):
+    conv_id: str
+
+
 class LeadUpdateRequest(BaseModel):
     conv_id: str
     handler_id: UUID | None = None

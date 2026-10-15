@@ -2,6 +2,54 @@
 
 Endpoint ini memperbarui data lead dari percakapan WhatsApp yang sudah ada. Pengguna harus memiliki akses ke tenant pemilik percakapan. Perubahan mode menentukan penanganan pesan berikutnya; mode `ai` memerlukan konfigurasi agent aktif agar balasan otomatis dapat berjalan.
 
+## `POST /api/v1/leads/details`
+
+Mengambil data lead untuk satu percakapan WhatsApp.
+
+**Method:** `POST`
+
+**Authorization:** `Bearer <jwt>` dari `POST /api/v1/auth/login`; pengguna dengan akses tenant percakapan.
+
+**Request**
+
+```json
+{
+  "conv_id": "fF4vJ2lA8sTrN0qLmP5xB"
+}
+```
+
+| Field | Type | Required |
+|---|---|---|
+| `conv_id` | string ID percakapan | yes |
+
+**Response** — `200 OK`
+
+```json
+{
+  "success": true,
+  "code": 200,
+  "status": "OK",
+  "message": "lead retrieved successfully",
+  "data": {
+    "conv_id": "fF4vJ2lA8sTrN0qLmP5xB",
+    "stage_id": "Qm3vX8pL2nR6tY9wK4sJd",
+    "handler_id": null,
+    "mode": "ai",
+    "note": null,
+    "created_at": "2026-10-15T09:00:00+00:00",
+    "updated_at": "2026-10-15T09:00:00+00:00"
+  }
+}
+```
+
+| Code | Status | Message | When |
+|---|---|---|---|
+| 400 | `BAD_REQUEST` | `invalid request: <field>` | field wajib hilang atau tipe salah |
+| 400 | `BAD_REQUEST` | `conv_id is required` | ID percakapan kosong |
+| 401 | `UNAUTHORIZED` | `missing or invalid authorization header` | JWT hilang atau tidak sah |
+| 404 | `NOT_FOUND` | `conversation not found` | percakapan tidak ada atau pengguna tidak punya akses tenant |
+| 404 | `NOT_FOUND` | `lead not found` | percakapan belum memiliki baris lead |
+
 ## `POST /api/v1/leads/change-mode`
 
 Mengubah mode lead secara eksplisit menjadi `ai` atau `human`.
