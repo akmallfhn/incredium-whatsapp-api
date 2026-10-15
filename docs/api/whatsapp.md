@@ -70,7 +70,8 @@ Mengembalikan percakapan milik satu tenant yang cocok dengan filter, diurutkan s
       "total_data": 1,
       "total_page": 1,
       "current_page": 1,
-      "page_size": 20
+      "page_size": 20,
+      "has_active_agent": true
     }
   }
 }
@@ -81,6 +82,8 @@ Field `last_message_*` diambil dari chat terbaru percakapan itu menurut `created
 `meta_connection_id` menunjukkan nomor WhatsApp bisnis yang memiliki percakapan. Pelanggan yang sama dapat memiliki percakapan terpisah jika menghubungi nomor bisnis lain dalam tenant yang sama.
 
 `unread_count` menghitung chat `inbound` yang lebih baru dari chat `last_read_id`; kalau `last_read_id` masih `null`, semua chat `inbound` terhitung. `window_expired` bernilai `true` kalau chat `inbound` terakhir sudah 24 jam atau lebih, atau belum ada sama sekali. Selama `true`, Meta hanya menerima pesan template, jadi `POST /api/v1/whatsapp/send` akan menolak dengan `409`.
+
+`metapaging.has_active_agent` bernilai `true` bila `tenants.active_agent_id` terisi, yaitu tenant punya agent balasan aktif; `false` berarti balasan AI tenant mati. Nilainya tidak dipengaruhi filter `search`, `stage_id`, `mode`, atau `handler_id`.
 
 `page` default `1`, `page_size` default `20` dan dibatasi maksimum `100`. Daftar kosong tetap mengembalikan `list: []` dan `total_page: 0`.
 

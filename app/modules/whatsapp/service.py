@@ -450,7 +450,8 @@ class WhatsAppInboxService:
             raise ApiError(400, "tenant_id is required")
         if not _can_access_tenant(user, req.tenant_id):
             raise ApiError(403, "tenant access denied")
-        if await self._tenants.find_by_id(req.tenant_id) is None:
+        tenant = await self._tenants.find_by_id(req.tenant_id)
+        if tenant is None:
             raise ApiError(404, "tenant not found")
 
         f = ConversationFilter(
@@ -469,7 +470,10 @@ class WhatsAppInboxService:
         now = datetime.now(timezone.utc)
         return {
             "list": [_conversation_payload(row, now) for row in rows],
-            "metapaging": pagination.meta(total, page, page_size),
+            "metapaging": {
+                **pagination.meta(total, page, page_size),
+                "has_active_agent": tenant.active_agent_id is not None,
+            },
         }
 
     async def chats(self, req: ChatListRequest, token: str) -> dict[str, Any]:
