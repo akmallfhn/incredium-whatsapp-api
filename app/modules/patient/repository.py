@@ -58,7 +58,13 @@ class PatientRepository:
         return patient
 
     async def list_patients(
-        self, tenant_id: str, search: str | None, category_id: int | None, limit: int, skip: int
+        self,
+        tenant_id: str,
+        search: str | None,
+        category_id: int | None,
+        conversation_id: str | None,
+        limit: int,
+        skip: int,
     ) -> tuple[int, list[Patient]]:
         conditions = [Patient.tenant_id == tenant_id]
         if search:
@@ -66,6 +72,8 @@ class PatientRepository:
             conditions.append(or_(Patient.name.ilike(pattern), Patient.phone_number.ilike(pattern)))
         if category_id is not None:
             conditions.append(Patient.category_id == category_id)
+        if conversation_id is not None:
+            conditions.append(Patient.conversation_id == conversation_id)
         total = await self._session.scalar(
             select(func.count()).select_from(Patient).where(*conditions)
         )

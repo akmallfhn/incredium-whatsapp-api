@@ -54,6 +54,7 @@ class PatientListRequest(BaseModel):
     tenant_id: str
     search: str | None = None
     category_id: int | None = None
+    conversation_id: str | None = None
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1)
 

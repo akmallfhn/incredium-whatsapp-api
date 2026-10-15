@@ -164,11 +164,14 @@ class PatientService:
 
     async def list(self, req: PatientListRequest, token: str) -> dict[str, Any]:
         await self._authorize(req.tenant_id, token)
+        if req.conversation_id is not None and not req.conversation_id.strip():
+            raise ApiError(400, "conversation_id is required")
         page, size = pagination.normalize(req.page, req.page_size)
         total, rows = await self._patients.list_patients(
             req.tenant_id,
             (req.search or "").strip() or None,
             req.category_id,
+            req.conversation_id,
             size,
             pagination.offset(page, size),
         )

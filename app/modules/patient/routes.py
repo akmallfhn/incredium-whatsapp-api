@@ -26,7 +26,9 @@ def register_patient_routes(rg: APIRouter, build_service: ServiceFactory) -> Non
     def service(session: AsyncSession = Depends(get_session)) -> PatientService:
         return build_service(session)
 
-    @router.post("/categories/create")
+    category_router = APIRouter(prefix="/patient-categories", tags=["patients"])
+
+    @category_router.post("/create")
     async def create_category(
         req: CategoryCreateRequest,
         token: str = Depends(bearer_token),
@@ -36,7 +38,7 @@ def register_patient_routes(rg: APIRouter, build_service: ServiceFactory) -> Non
             201, "patient category created successfully", await svc.create_category(req, token)
         )
 
-    @router.post("/categories")
+    @category_router.post("")
     async def categories(
         req: CategoryListRequest,
         token: str = Depends(bearer_token),
@@ -45,6 +47,8 @@ def register_patient_routes(rg: APIRouter, build_service: ServiceFactory) -> Non
         return success(
             200, "patient categories retrieved successfully", await svc.categories(req, token)
         )
+
+    rg.include_router(category_router)
 
     @router.post("/create")
     async def create(

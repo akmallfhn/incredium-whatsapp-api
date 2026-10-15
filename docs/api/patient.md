@@ -2,7 +2,7 @@
 
 Endpoint ini mengelola kategori dan data pasien per tenant. Semua endpoint memakai JWT dari `auth/login`, memeriksa akses tenant, dan menerima JSON melalui `POST`. ID kategori bertambah otomatis, sedangkan ID pasien dibuat dengan nanoid(). Satu percakapan WhatsApp hanya dapat terhubung ke satu pasien dalam tenant yang sama.
 
-## `POST /api/v1/patients/categories/create`
+## `POST /api/v1/patient-categories/create`
 
 Membuat kategori pasien untuk satu tenant.
 
@@ -52,7 +52,7 @@ Membuat kategori pasien untuk satu tenant.
 | 403 | `FORBIDDEN` | `tenant access denied` | pengguna tidak memiliki akses tenant |
 | 409 | `CONFLICT` | `patient category already exists` | nama kategori sudah terpakai di tenant |
 
-## `POST /api/v1/patients/categories`
+## `POST /api/v1/patient-categories`
 
 Mengambil kategori pasien dengan pagination untuk pilihan pada formulir.
 
@@ -108,6 +108,87 @@ Mengambil kategori pasien dengan pagination untuk pilihan pada formulir.
 |---|---|---|---|
 | 400 | `BAD_REQUEST` | `invalid request: <field>` | nilai halaman atau tipe salah |
 | 400 | `BAD_REQUEST` | `tenant_id is required` | tenant kosong |
+| 401 | `UNAUTHORIZED` | `missing or invalid authorization header` | JWT tidak sah |
+| 403 | `FORBIDDEN` | `tenant access denied` | pengguna tidak memiliki akses tenant |
+
+## `POST /api/v1/patients`
+
+Mengambil pasien dengan filter nama, telepon, dan kategori.
+
+**Method:** `POST`
+
+**Authorization:** `Bearer <jwt>`; pengguna dengan akses tenant.
+
+**Request**
+
+```json
+{
+  "tenant_id": "8yuPA4qUjqC3OfizucQoH",
+  "search": "Siti",
+  "category_id": 1,
+  "conversation_id": null,
+  "page": 1,
+  "page_size": 20
+}
+```
+
+| Field | Type | Required |
+|---|---|---|
+| `tenant_id` | string | yes |
+| `search` | string atau `null` | no |
+| `category_id` | integer atau `null` | no |
+| `conversation_id` | string ID percakapan atau `null` | no |
+| `page` | integer, minimal 1; default 1 | no |
+| `page_size` | integer, minimal 1; default 20, maksimal efektif 100 | no |
+
+Kirim `conversation_id` untuk menemukan pasien yang sudah terhubung ke satu percakapan; hilangkan field atau kirim `null` untuk mencari seluruh pasien tenant.
+
+**Response** — `200 OK`
+
+```json
+{
+  "success": true,
+  "code": 200,
+  "status": "OK",
+  "message": "patients retrieved successfully",
+  "data": {
+    "list": [
+      {
+        "id": "pR8vK2nT5xQaL7mZ0cYhJ",
+        "tenant_id": "8yuPA4qUjqC3OfizucQoH",
+        "category_id": 1,
+        "conversation_id": null,
+        "name": "Siti Aminah",
+        "satu_sehat_id": null,
+        "birth_date": "1995-04-12",
+        "birth_place": "Bandung",
+        "national_id": null,
+        "bpjs_number": null,
+        "address": null,
+        "phone_number": null,
+        "email": null,
+        "gender": "female",
+        "blood_type": null,
+        "allergy_history": null,
+        "created_at": "2026-10-15T09:00:00+00:00",
+        "updated_at": "2026-10-15T09:00:00+00:00"
+      }
+    ],
+    "metapaging": {
+      "total_data": 1,
+      "total_page": 1,
+      "current_page": 1,
+      "page_size": 20
+    }
+  }
+}
+```
+
+| Code | Status | Message | When |
+|---|---|---|---|
+| 400 | `BAD_REQUEST` | `invalid request: <field>` | filter atau halaman salah |
+| 400 | `BAD_REQUEST` | `tenant_id is required` | tenant kosong |
+| 400 | `BAD_REQUEST` | `conversation_id is required` | filter ID percakapan berupa string kosong |
 | 401 | `UNAUTHORIZED` | `missing or invalid authorization header` | JWT tidak sah |
 | 403 | `FORBIDDEN` | `tenant access denied` | pengguna tidak memiliki akses tenant |
 
@@ -263,82 +344,6 @@ Mengambil satu pasien berdasarkan ID dan tenant.
 | 401 | `UNAUTHORIZED` | `missing or invalid authorization header` | JWT tidak sah |
 | 403 | `FORBIDDEN` | `tenant access denied` | pengguna tidak memiliki akses tenant |
 | 404 | `NOT_FOUND` | `patient not found` | pasien tidak ada di tenant |
-
-## `POST /api/v1/patients`
-
-Mengambil pasien dengan filter nama, telepon, dan kategori.
-
-**Method:** `POST`
-
-**Authorization:** `Bearer <jwt>`; pengguna dengan akses tenant.
-
-**Request**
-
-```json
-{
-  "tenant_id": "8yuPA4qUjqC3OfizucQoH",
-  "search": "Siti",
-  "category_id": 1,
-  "page": 1,
-  "page_size": 20
-}
-```
-
-| Field | Type | Required |
-|---|---|---|
-| `tenant_id` | string | yes |
-| `search` | string atau `null` | no |
-| `category_id` | integer atau `null` | no |
-| `page` | integer, minimal 1; default 1 | no |
-| `page_size` | integer, minimal 1; default 20, maksimal efektif 100 | no |
-
-**Response** — `200 OK`
-
-```json
-{
-  "success": true,
-  "code": 200,
-  "status": "OK",
-  "message": "patients retrieved successfully",
-  "data": {
-    "list": [
-      {
-        "id": "pR8vK2nT5xQaL7mZ0cYhJ",
-        "tenant_id": "8yuPA4qUjqC3OfizucQoH",
-        "category_id": 1,
-        "conversation_id": null,
-        "name": "Siti Aminah",
-        "satu_sehat_id": null,
-        "birth_date": "1995-04-12",
-        "birth_place": "Bandung",
-        "national_id": null,
-        "bpjs_number": null,
-        "address": null,
-        "phone_number": null,
-        "email": null,
-        "gender": "female",
-        "blood_type": null,
-        "allergy_history": null,
-        "created_at": "2026-10-15T09:00:00+00:00",
-        "updated_at": "2026-10-15T09:00:00+00:00"
-      }
-    ],
-    "metapaging": {
-      "total_data": 1,
-      "total_page": 1,
-      "current_page": 1,
-      "page_size": 20
-    }
-  }
-}
-```
-
-| Code | Status | Message | When |
-|---|---|---|---|
-| 400 | `BAD_REQUEST` | `invalid request: <field>` | filter atau halaman salah |
-| 400 | `BAD_REQUEST` | `tenant_id is required` | tenant kosong |
-| 401 | `UNAUTHORIZED` | `missing or invalid authorization header` | JWT tidak sah |
-| 403 | `FORBIDDEN` | `tenant access denied` | pengguna tidak memiliki akses tenant |
 
 ## `POST /api/v1/patients/update`
 

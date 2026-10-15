@@ -4,8 +4,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.service import AuthService
 from app.modules.lead.repository import LeadRepository
-from app.modules.lead.schema import LeadChangeModeRequest, LeadDetailsRequest, LeadUpdateRequest
+from app.modules.lead.schema import (
+    LeadChangeModeRequest,
+    LeadDetailsRequest,
+    LeadStageListRequest,
+    LeadUpdateRequest,
+)
 from app.modules.whatsapp.entity import WaConversation, WaLead
+from app.shared import pagination
 from app.shared.response import ApiError
 
 
@@ -54,6 +60,29 @@ class LeadService:
         if lead is None:
             raise ApiError(404, "lead not found")
         return _lead_payload(lead)
+
+    async def stages(self, req: LeadStageListRequest, token: str) -> dict[str, Any]:
+        user = await self._auth.authenticate(token)
+        if not req.tenant_id.strip():
+            raise ApiError(400, "tenant_id is required")
+        if not any(tenant["id"] == req.tenant_id for tenant in user["tenants"]):
+            raise ApiError(403, "tenant access denied")
+        page, size = pagination.normalize(req.page, req.page_size)
+        total, rows = await self._leads.stages(req.tenant_id, size, pagination.offset(page, size))
+        return {
+            "list": [
+                {
+                    "id": row.id,
+                    "tenant_id": row.tenant_id,
+                    "key": row.key,
+                    "name": row.name,
+                    "description": row.description,
+                    "position": row.position,
+                }
+                for row in rows
+            ],
+            "metapaging": pagination.meta(total, page, size),
+        }
 
     async def update(self, req: LeadUpdateRequest, token: str) -> dict[str, Any]:
         conversation = await self._conversation(req.conv_id, token)

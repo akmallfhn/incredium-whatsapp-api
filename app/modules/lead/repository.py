@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.entity import User, UserAccess
@@ -29,6 +29,20 @@ class LeadRepository:
                 WaLeadStage.status == STATUS_ACTIVE,
             )
         )
+
+    async def stages(self, tenant_id: str, limit: int, skip: int) -> tuple[int, list[WaLeadStage]]:
+        condition = (WaLeadStage.tenant_id == tenant_id, WaLeadStage.status == STATUS_ACTIVE)
+        total = await self._session.scalar(
+            select(func.count()).select_from(WaLeadStage).where(*condition)
+        )
+        rows = await self._session.scalars(
+            select(WaLeadStage)
+            .where(*condition)
+            .order_by(WaLeadStage.position, WaLeadStage.id)
+            .limit(limit)
+            .offset(skip)
+        )
+        return total or 0, list(rows)
 
     async def handler(self, tenant_id: str, user_id: str) -> User | None:
         return await self._session.scalar(
