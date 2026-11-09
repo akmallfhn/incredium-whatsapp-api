@@ -43,7 +43,7 @@ from app.modules.whatsapp.schema import (
 )
 from app.shared import pagination
 from app.shared.agent_cache import AgentCache
-from app.shared.pdf import shrink_pdf
+from app.shared.pdf_process import shrink_pdf_isolated
 from app.shared.response import ApiError
 from app.shared.storage import SupabaseStorage
 
@@ -53,6 +53,7 @@ SUPPORTED_MESSAGE_TYPES = {"audio", "contacts", "document", "image", "sticker", 
 # Tipe pesan yang attachment-nya beneran file (didownload dari Meta & diupload ke Storage).
 MEDIA_MESSAGE_TYPES = {"audio", "document", "image", "sticker", "video"}
 PDF_MIME = "application/pdf"
+PDF_QUEUE_TIMEOUT_SECONDS = 60
 
 # Di luar jendela ini Meta hanya menerima pesan template.
 CUSTOMER_SERVICE_WINDOW = timedelta(hours=24)
@@ -110,6 +111,7 @@ class WhatsAppWebhookService:
         storage: SupabaseStorage,
         replies: AgentReplyRepository,
         cache: AgentCache,
+        pdf_semaphore: asyncio.Semaphore,
     ) -> None:
         self._session = session
         self._connections = connections
@@ -119,6 +121,7 @@ class WhatsAppWebhookService:
         self._storage = storage
         self._replies = replies
         self._cache = cache
+        self._pdf_semaphore = pdf_semaphore
 
     async def process(self, payload: WAWebhookBody) -> ProcessOutcome:
         """Kerjakan satu payload; pemanggil memakai hasilnya untuk menandai statusnya."""
@@ -377,6 +380,8 @@ class WhatsAppWebhookService:
             return {**attachment, "storage_url": existing_url}
 
         try:
+            # Lepas transaksi baca sebelum unduhan dan antrean PDF yang bisa lama.
+            await self._session.rollback()
             content, mime_type = await self._media.fetch(
                 access_token=ctx.access_token,
                 phone_number_id=ctx.phone_number_id,
@@ -411,8 +416,16 @@ class WhatsAppWebhookService:
             return None
 
     async def _shrink_pdf(self, content: bytes, media_id: str) -> bytes:
-        """Di thread terpisah: pikepdf/Pillow CPU-bound dan akan menahan event loop webhook."""
-        shrunk = await asyncio.to_thread(shrink_pdf, content, constants.SUPABASE_MAX_OBJECT_BYTES)
+        """Proses singkat membatasi lonjakan RAM dan melepas memori setelah PDF selesai."""
+        try:
+            await asyncio.wait_for(self._pdf_semaphore.acquire(), PDF_QUEUE_TIMEOUT_SECONDS)
+        except TimeoutError:
+            logger.warning("wa-meta webhook: antrean pdf %s penuh, file asli dipakai", media_id)
+            return content
+        try:
+            shrunk = await shrink_pdf_isolated(content, constants.SUPABASE_MAX_OBJECT_BYTES)
+        finally:
+            self._pdf_semaphore.release()
         if len(shrunk) < len(content):
             logger.info(
                 f"wa-meta webhook: pdf {media_id} diperkecil {len(content)} -> {len(shrunk)} bytes"

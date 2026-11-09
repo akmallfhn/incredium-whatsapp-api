@@ -96,7 +96,7 @@ def _pass(content: bytes, max_edge: int, quality: int) -> bytes:
 
 
 def shrink_pdf(content: bytes, ceiling: int) -> bytes:
-    """Sinkron dan CPU-bound; panggil lewat thread. Selalu mengembalikan PDF yang bisa dipakai."""
+    """Sinkron dan CPU-bound; jalankan di proses sementara agar memorinya dilepas."""
     best = content
     for max_edge, quality in QUALITY_TIERS:
         try:

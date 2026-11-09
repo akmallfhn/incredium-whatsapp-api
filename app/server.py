@@ -53,6 +53,7 @@ from app.shared.response import ApiError, api_error_handler, error
 from app.shared.storage import SupabaseStorage
 
 logger = logging.getLogger(__name__)
+pdf_semaphore = asyncio.Semaphore(1)
 
 
 def build_auth_service(session: AsyncSession) -> AuthService:
@@ -89,6 +90,7 @@ def build_whatsapp_service(session: AsyncSession) -> WhatsAppWebhookService:
         ),
         replies=AgentReplyRepository(session),
         cache=AgentCache(client),
+        pdf_semaphore=pdf_semaphore,
     )
 
 

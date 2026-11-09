@@ -1,8 +1,10 @@
+import asyncio
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from app.modules.whatsapp.schema import ConversationListRequest
-from app.modules.whatsapp.service import WhatsAppInboxService
+from app.modules.whatsapp.service import WhatsAppInboxService, WhatsAppWebhookService
 
 
 class _Auth:
@@ -74,3 +76,23 @@ class WhatsAppConversationMetaPagingTest(unittest.IsolatedAsyncioTestCase):
         )
         data = await service.conversations(ConversationListRequest(tenant_id="tenant-a"), "token")
         return data, tenants
+
+
+class WhatsAppPdfQueueTest(unittest.IsolatedAsyncioTestCase):
+    async def test_busy_pdf_queue_uses_original(self) -> None:
+        service = WhatsAppWebhookService(
+            SimpleNamespace(),
+            connections=SimpleNamespace(),
+            conversations=SimpleNamespace(),
+            chats=SimpleNamespace(),
+            media=SimpleNamespace(),
+            storage=SimpleNamespace(),
+            replies=SimpleNamespace(),
+            cache=SimpleNamespace(),
+            pdf_semaphore=asyncio.Semaphore(0),
+        )
+
+        with patch("app.modules.whatsapp.service.PDF_QUEUE_TIMEOUT_SECONDS", 0.001):
+            result = await service._shrink_pdf(b"original", "media-id")
+
+        self.assertEqual(result, b"original")
